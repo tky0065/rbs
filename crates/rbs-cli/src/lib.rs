@@ -991,6 +991,12 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         );
     }
 
+    // Après la référence requise, qui prive le seed et les tests : chaque phrase nomme un
+    // repli d'écran plus léger, mais tout aussi silencieux si l'annonce ne s'affiche pas.
+    for repli in &planned.replis_de_reference {
+        hors_du_document(&format!("\n  {repli}"), json);
+    }
+
     let applique = appliquer(&planned.plan, force, dry_run, json)?;
 
     // Avant l'absorption du plan du client : le bilan annoncé doit rendre compte du plan

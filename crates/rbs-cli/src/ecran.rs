@@ -624,7 +624,7 @@ fn dans(lang: Lang, fr: &str, en: &str) -> String {
 ///
 /// Non traduit, et c'est délibéré : le nom vient de `--fields`, donc du développeur, et
 /// une traduction inventerait un mot qu'il n'a pas écrit.
-fn humanise(nom: &str) -> String {
+pub(crate) fn humanise(nom: &str) -> String {
     let espace = nom.replace('_', " ");
     let mut chars = espace.chars();
 

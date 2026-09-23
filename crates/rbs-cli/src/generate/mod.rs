@@ -43,6 +43,7 @@ pub(crate) mod job;
 pub(crate) mod migration;
 pub(crate) mod mount;
 pub(crate) mod name;
+pub(crate) mod reference;
 pub(crate) mod relations;
 pub(crate) mod repository;
 pub(crate) mod seed;

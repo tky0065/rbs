@@ -17,8 +17,8 @@ use crate::plan;
 use super::feature::Feature;
 use super::fields::{FieldType, to_pascal_case};
 use super::{
-    controller, dto, entities, entity, fields, filter, format, migration, mount, name, relations,
-    repository, seed, service, tests_http,
+    controller, dto, entities, entity, fields, filter, format, migration, mount, name, reference,
+    relations, repository, seed, service, tests_http,
 };
 
 /// Ce qu'il faut savoir pour générer une feature.
@@ -82,6 +82,10 @@ pub(crate) struct Planned {
     /// Le plan ne la porte pas : le contrat dont le client sort n'existe qu'une fois le
     /// module écrit, donc après l'application.
     pub geste_suivant: Option<String>,
+    /// Une phrase par référence qui ne reçoit pas tout ce qu'un écran sait en rendre —
+    /// route de filtre absente, ou colonne libellé introuvable. Vide quand aucun écran
+    /// n'est engendré.
+    pub replis_de_reference: Vec<String>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -261,6 +265,11 @@ pub(crate) enum Error {
         /// La version du projet.
         projet: String,
     },
+
+    /// Une référence porte `label=<colonne>`, et la cible ne déclare pas cette colonne
+    /// en texte.
+    #[error("{0}")]
+    LabelInconnu(reference::LabelInconnu),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -329,6 +338,7 @@ impl Codee for Error {
             Error::EnfantSansCle { .. } => "enfant_sans_cle",
             Error::EcranOccupe { .. } => "ecran_occupe",
             Error::NoyauAnterieur { .. } => "noyau_anterieur",
+            Error::LabelInconnu(_) => "label_inconnu",
         }
     }
 
@@ -471,6 +481,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     } else {
         feature
     };
+
+    // Avant le rendu, et que l'écran soit engendré ou non : une colonne mal orthographiée
+    // ne doit pas attendre, silencieuse, le jour où le projet recevra le shell.
+    reference::verifier_les_labels(&root, &feature, &entities).map_err(Error::LabelInconnu)?;
+
     let module = feature.module().to_string();
 
     if root.join("src").join(&module).exists() {
@@ -540,6 +555,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // installés et adapte sa sortie. `--no-admin` est la seule sortie de secours.
     let ecran = (options.complete && !options.no_admin && metadonnees.porte("frontend-admin"))
         .then(|| crate::ecran::Ecran::pour(&feature, crate::lang::Lang::of_project(&root)));
+
+    // Calculées seulement si l'écran est émis : sans lui, aucun sélecteur n'existe pour
+    // qu'un repli s'y annonce. `issues` n'est pas encore branchée dans l'écran — elle le
+    // sera par le générateur qui rend ses champs.
+    let (_issues, replis) = match &ecran {
+        Some(_) => reference::fiches(&root, &feature, &entities),
+        None => (Vec::new(), Vec::new()),
+    };
 
     // Avant le rendu : l'écran de démonstration du fragment occupe déjà son fichier et sa
     // route. La condition porte sur le fichier autant que sur le nom — un développeur qui
@@ -640,7 +663,33 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         // Sans `--out` : le projet porte le socle, puisqu'il porte le shell, et le défaut
         // de la commande est alors le répertoire où ce socle importe son client.
         geste_suivant: ecran.map(|_| "rbs generate client --lang ts".to_string()),
+        replis_de_reference: replis.iter().map(phrase_repli).collect(),
     })
+}
+
+/// La phrase qu'annonce un repli, selon sa cause et sa cible.
+///
+/// `users` reçoit une phrase à part : le guide `auth` explique pourquoi le fragment ne
+/// pose pas de route de filtre sur les comptes, et c'est ce geste-là que la phrase pointe
+/// plutôt que de laisser deviner une route qui n'arrivera jamais.
+fn phrase_repli(repli: &reference::Repli) -> String {
+    match &repli.cause {
+        reference::Cause::SansRouteDeFiltre if repli.cible == "users" => format!(
+            "la référence « {} » reste une saisie d'identifiant : « users » n'expose pas \
+             POST /users/filter — voir « Lister les comptes » dans le guide auth",
+            repli.relation
+        ),
+        reference::Cause::SansRouteDeFiltre => format!(
+            "la référence « {} » reste une saisie d'identifiant : « {} » n'expose pas de route \
+             de filtre",
+            repli.relation, repli.cible
+        ),
+        reference::Cause::SansColonneTextuelle => format!(
+            "la référence « {} » s'affichera par son identifiant raccourci : « {} » n'a pas de \
+             colonne textuelle — label=<colonne> en choisit une",
+            repli.relation, repli.cible
+        ),
+    }
 }
 
 /// Vérifie que `role` est posable sur ce projet.
@@ -780,6 +829,7 @@ fn plan_repair(
         required_reference: None,
         zone_manquante,
         geste_suivant: None,
+        replis_de_reference: Vec::new(),
     })
 }
 
@@ -892,7 +942,8 @@ impl crate::errors::Classee for Error {
             | Self::RoleInconnu { .. }
             | Self::EnfantSansCle { .. }
             | Self::EcranOccupe { .. }
-            | Self::NoyauAnterieur { .. } => Sortie::Usage,
+            | Self::NoyauAnterieur { .. }
+            | Self::LabelInconnu(_) => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
             Self::Rendu { .. } | Self::MigrationsAbsentes(_) | Self::UploadStorageHorsModules => {
                 Sortie::Faute
@@ -1017,6 +1068,51 @@ mod tests {
     fn read(path: &Path) -> String {
         fs::read_to_string(path)
             .unwrap_or_else(|error| panic!("{} illisible : {error}", path.display()))
+    }
+
+    /// Un `label=` mal orthographié doit être refusé avant le rendu, même sur un projet
+    /// sans le fragment `frontend-admin` : la faute ne doit pas attendre le jour où le
+    /// projet reçoit le shell d'administration.
+    #[test]
+    fn an_unknown_label_is_refused_even_without_the_admin_shell() {
+        let (_dir, root) = project_with_auth();
+        commit(&root);
+        run(&options(&root, "tickets", Some("sujet:string"), true)).expect("tickets");
+        commit(&root);
+
+        let erreur = run(&options(
+            &root,
+            "commentaires",
+            Some("corps:text,ticket:references:tickets:label=titre"),
+            true,
+        ))
+        .expect_err("refus attendu")
+        .to_string();
+
+        assert!(erreur.contains("« titre »"), "{erreur}");
+        assert!(
+            erreur.contains("sujet"),
+            "les colonnes connues sont nommées : {erreur}"
+        );
+    }
+
+    /// Une référence vers la table qu'on engendre elle-même : ses colonnes textuelles
+    /// sont celles des champs de la feature, pas d'un fichier déjà sur le disque.
+    #[test]
+    fn a_self_reference_takes_its_label_from_the_feature_being_generated() {
+        let feature = Feature::fresh(
+            "categories",
+            fields::parse("nom:string,parent:references:categories:optional").expect("valide"),
+        );
+        let racine = tempfile::TempDir::new().expect("répertoire");
+
+        let (issues, _) = super::super::reference::fiches(racine.path(), &feature, &[]);
+
+        let super::super::reference::Issue::Selecteur(fiche) = &issues[0] else {
+            panic!("un sélecteur attendu : {issues:?}");
+        };
+        assert_eq!(fiche.libelle.as_deref(), Some("nom"));
+        assert_eq!(fiche.methode, "categoriesFilter");
     }
 
     /// L'inventaire est ce que l'agent lit pour savoir ce que le projet porte : une
