@@ -96,8 +96,10 @@ pub async fn create(
     ValidatedJson(input): ValidatedJson<CreateCommentaire>,
 ) -> Result<(StatusCode, Json<CommentaireResponse>)> {
     identite.require_role(Role::User)?;
+    // L'auteur est l'appelant : lu dans le corps, il laisserait écrire au nom d'autrui.
+    let auteur = identite.user_uuid()?;
 
-    let commentaire = service::create(state.core().db(), input).await?;
+    let commentaire = service::create(state.core().db(), auteur, input).await?;
 
     Ok((StatusCode::CREATED, Json(commentaire)))
 }

@@ -42,18 +42,24 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<TicketResponse> {
     Ok(ticket.into())
 }
 
-pub async fn create(db: &DatabaseConnection, input: CreateTicket) -> Result<TicketResponse> {
+// region: create
+pub async fn create(
+    db: &DatabaseConnection,
+    auteur: Uuid,
+    input: CreateTicket,
+) -> Result<TicketResponse> {
     let ticket = ActiveModel {
         sujet: Set(input.sujet),
         detail: Set(input.detail),
         statut: Set(input.statut),
         priorite: Set(input.priorite),
-        auteur_id: Set(input.auteur_id),
+        auteur_id: Set(auteur),
         ..Default::default()
     };
 
     Ok(repository::create(db, ticket).await?.into())
 }
+// endregion: create
 
 pub async fn update(
     db: &DatabaseConnection,
@@ -79,9 +85,6 @@ pub async fn update(
     }
     if let Some(priorite) = input.priorite {
         ticket.priorite = Set(priorite);
-    }
-    if let Some(auteur_id) = input.auteur_id {
-        ticket.auteur_id = Set(auteur_id);
     }
     ticket.updated_at = Set(chrono::Utc::now().into());
 

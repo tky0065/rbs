@@ -44,12 +44,13 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<CommentaireRespon
 
 pub async fn create(
     db: &DatabaseConnection,
+    auteur: Uuid,
     input: CreateCommentaire,
 ) -> Result<CommentaireResponse> {
     let commentaire = ActiveModel {
         corps: Set(input.corps),
         ticket_id: Set(input.ticket_id),
-        auteur_id: Set(input.auteur_id),
+        auteur_id: Set(auteur),
         ..Default::default()
     };
 
@@ -74,9 +75,6 @@ pub async fn update(
     }
     if let Some(ticket_id) = input.ticket_id {
         commentaire.ticket_id = Set(ticket_id);
-    }
-    if let Some(auteur_id) = input.auteur_id {
-        commentaire.auteur_id = Set(auteur_id);
     }
     commentaire.updated_at = Set(chrono::Utc::now().into());
 

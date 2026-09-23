@@ -112,4 +112,5 @@ fn without_body(method: &str, path: &str) -> Request<Body> {
 }
 
 mod access;
+mod auteur;
 mod errors;

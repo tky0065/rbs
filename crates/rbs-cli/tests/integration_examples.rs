@@ -223,7 +223,18 @@ const EXEMPLES: &[Exemple] = &[
         ],
         role: None,
         with_upload: false,
-        edite_a_la_main: &[],
+        // L'auteur se lit dans le jeton, sur les deux tables : c'est la retouche que le
+        // tutoriel enseigne, et `the_hand_edits_of_help_desk_are_in_place` en répond.
+        edite_a_la_main: &[
+            "src/tickets/dto.rs",
+            "src/tickets/service.rs",
+            "src/tickets/controller.rs",
+            "src/tickets/tests/mod.rs",
+            "src/tickets/tests/auteur.rs",
+            "src/commentaires/dto.rs",
+            "src/commentaires/service.rs",
+            "src/commentaires/controller.rs",
+        ],
         engendre_a_part: &[],
     },
 ];
@@ -1154,6 +1165,47 @@ fn the_hand_edits_of_event_hub_are_in_place() {
     assert!(
         controller.contains("service::create(state.core().db(), input, &identite.user_id)"),
         "src/orders/controller.rs : l'identité doit descendre jusqu'au journal :\n{controller}"
+    );
+}
+
+/// L'auteur est-il encore lu dans le jeton, sur les deux tables ?
+///
+/// Les fichiers retouchés sortent de la comparaison : sans ce test, un `auteur_id` revenu
+/// dans un DTO d'entrée rouvrirait l'écriture au nom d'autrui, et le tutoriel qui cite
+/// l'exemple décrirait une garde que plus rien ne tient.
+#[test]
+fn the_hand_edits_of_help_desk_are_in_place() {
+    let racine = common::depot().join("examples").join("help-desk");
+    let lire = |relatif: &str| {
+        std::fs::read_to_string(racine.join(relatif))
+            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
+    };
+
+    for feature in ["tickets", "commentaires"] {
+        let controleur = lire(&format!("src/{feature}/controller.rs"));
+        assert!(
+            controleur.contains("identite.user_uuid()?"),
+            "src/{feature}/controller.rs : l'auteur n'est plus lu dans le jeton"
+        );
+
+        let dto = lire(&format!("src/{feature}/dto.rs"));
+        for bloc in dto.split("pub struct").skip(1) {
+            let entree = bloc.starts_with(" Create") || bloc.starts_with(" Update");
+            assert!(
+                !(entree && bloc.contains("auteur_id")),
+                "src/{feature}/dto.rs : un DTO d'entrée accepte de nouveau `auteur_id`"
+            );
+        }
+    }
+
+    let tests = lire("src/tickets/tests/auteur.rs");
+    assert!(
+        tests.contains("async fn the_author_is_the_caller_whatever_the_body_claims()"),
+        "le test que le tutoriel cite a disparu"
+    );
+    assert!(
+        lire("src/tickets/tests/mod.rs").contains("mod auteur;"),
+        "`auteur.rs` n'est plus déclaré : ses tests ne compileraient plus"
     );
 }
 

@@ -9,14 +9,12 @@ use super::model::Model;
 pub struct CreateCommentaire {
     pub corps: String,
     pub ticket_id: Uuid,
-    pub auteur_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct UpdateCommentaire {
     pub corps: Option<String>,
     pub ticket_id: Option<Uuid>,
-    pub auteur_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

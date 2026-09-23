@@ -5,6 +5,7 @@ use validator::Validate;
 
 use super::model::{Model, TicketPriorite, TicketStatut};
 
+// region: entree
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateTicket {
     #[validate(length(max = 255))]
@@ -12,7 +13,6 @@ pub struct CreateTicket {
     pub detail: String,
     pub statut: TicketStatut,
     pub priorite: TicketPriorite,
-    pub auteur_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
@@ -22,8 +22,8 @@ pub struct UpdateTicket {
     pub detail: Option<String>,
     pub statut: Option<TicketStatut>,
     pub priorite: Option<TicketPriorite>,
-    pub auteur_id: Option<Uuid>,
 }
+// endregion: entree
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TicketResponse {

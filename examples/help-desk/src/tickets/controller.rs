@@ -90,17 +90,21 @@ pub async fn filter(
         (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
+// region: create
 pub async fn create(
     State(state): State<AppState>,
     identite: Identity,
     ValidatedJson(input): ValidatedJson<CreateTicket>,
 ) -> Result<(StatusCode, Json<TicketResponse>)> {
     identite.require_role(Role::User)?;
+    // L'auteur est l'appelant : lu dans le corps, il laisserait écrire au nom d'autrui.
+    let auteur = identite.user_uuid()?;
 
-    let ticket = service::create(state.core().db(), input).await?;
+    let ticket = service::create(state.core().db(), auteur, input).await?;
 
     Ok((StatusCode::CREATED, Json(ticket)))
 }
+// endregion: create
 
 #[utoipa::path(
     get,
