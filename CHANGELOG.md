@@ -38,10 +38,12 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
-- **`generate crud` refuses a project whose `rbs-core` predates 1.10.0.** The `filter.rs` it
+- **`generate crud` refuses a project whose rbs version predates 1.10.0.** The `filter.rs` it
   writes applies `in`, which an earlier core does not have: the project would no longer
-  compile. The refusal names `rbs upgrade`, which raises that line. A path dependency, with
-  no version, is not bounded.
+  compile. The version read is the project's own, `version` under `[package.metadata.rbs]`,
+  and not the `rbs-core` dependency: a core taken by path is refused as well while that line
+  predates 1.10.0. The refusal names `rbs upgrade`, which raises that line together with
+  `rbs-core`.
 
 ## [1.9.0] — 2026-09-23
 

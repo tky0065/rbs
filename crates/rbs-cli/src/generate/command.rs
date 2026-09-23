@@ -695,9 +695,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
 /// La phrase qu'annonce un repli, selon sa cause et sa cible.
 ///
-/// `users` reçoit une phrase à part : le guide `auth` explique pourquoi le fragment ne
-/// pose pas de route de filtre sur les comptes, et c'est ce geste-là que la phrase pointe
-/// plutôt que de laisser deviner une route qui n'arrivera jamais.
+/// `users` reçoit une phrase à part : le fragment `auth` pose `POST /users/filter` depuis
+/// 1.10.0, et son absence signale une `auth` installée avant. La phrase pointe le guide
+/// qui dit comment l'ajouter à la main, puisque `rbs upgrade` ne réécrit pas un contrôleur.
 fn phrase_repli(repli: &reference::Repli) -> String {
     match &repli.cause {
         reference::Cause::SansRouteDeFiltre if repli.cible == "users" => format!(
