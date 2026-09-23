@@ -27,6 +27,7 @@ use serde::Serialize;
 
 use crate::generate::feature::Feature;
 use crate::generate::fields::{Field, FieldType};
+use crate::generate::reference::Issue;
 use crate::lang::Lang;
 
 /// Combien de lignes une page porte : cinq sur la démonstration, dont les onze lignes
@@ -66,6 +67,27 @@ const PATRON: &str = include_str!(concat!(
     "/templates/features/frontend-admin/client/src/admin/vues/Patron.vue.jinja"
 ));
 
+/// Les deux fichiers génériques des références, là où le fragment les dépose.
+///
+/// `generate crud` les rend s'ils manquent — projet équipé du shell avant qu'ils
+/// n'existent — et ne les écrase jamais : ils appartiennent au projet une fois posés.
+pub(crate) const GENERIQUES: [(&str, &str); 2] = [
+    (
+        "frontend/src/admin/references/ChoixReference.vue",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/features/frontend-admin/client/src/admin/references/ChoixReference.vue.jinja"
+        )),
+    ),
+    (
+        "frontend/src/admin/references/libelles.ts",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/features/frontend-admin/client/src/admin/references/libelles.ts.jinja"
+        )),
+    ),
+];
+
 /// Une propriété d'une ligne : ce que `interface Ligne` déclare, et ce que le détail montre.
 ///
 /// Distincte de [`Colonne`] : une ligne porte son identifiant et ses horodatages, que la
@@ -92,7 +114,7 @@ pub(crate) struct Colonne {
     pub cle: String,
     /// Ce que l'opérateur lit en tête de colonne.
     pub libelle: String,
-    /// Comment la valeur se lit : `texte`, `date` ou `instant`.
+    /// Comment la valeur se lit : `texte`, `date`, `instant` ou `reference`.
     ///
     /// Le contrat porte ses horodatages en ISO 8601, que personne ne lit — une table qui
     /// affiche `2026-09-20T16:24:47.272129Z` donne l'heure sans la dire. La template
@@ -117,7 +139,8 @@ pub(crate) struct Champ {
     /// expressions qui traversent le formulaire — ce qui part vers la source, et ce qui en
     /// revient.
     pub controle: String,
-    /// Le composant d'interface qui rend le contrôle : `input`, `checkbox` ou `select`.
+    /// Le composant d'interface qui rend le contrôle : `input`, `checkbox`, `select` ou
+    /// `reference`.
     ///
     /// Distinct du nom : c'est lui que la template lit pour choisir le balisage, et lui que
     /// [`composants`] compte pour savoir quoi importer.
@@ -155,6 +178,19 @@ pub(crate) struct Api {
     /// La colonne sur laquelle le filtre porte, vide quand la table n'en a aucune de
     /// textuelle — [`Ecran::filtrable`] le dit alors, et l'écran n'affiche pas de filtre.
     pub recherche: String,
+}
+
+/// Ce que l'écran sait d'une colonne référence : comment chercher ses lignes et les nommer.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ReferenceEcran {
+    /// La colonne : `ticket_id`.
+    pub cle: String,
+    /// La méthode du client qui filtre la cible : `ticketsFilter`.
+    pub methode: String,
+    /// La colonne libellé de la cible, absente quand l'identifiant raccourci en tient lieu.
+    pub libelle: Option<String>,
+    /// La référence peut rester vide.
+    pub optionnel: bool,
 }
 
 /// Les libellés d'un écran, dans la langue du projet.
@@ -234,6 +270,9 @@ pub(crate) struct Ecran {
     pub lignes: Vec<String>,
     /// Le contrat que la source interroge, absent sur l'écran de démonstration.
     pub api: Option<Api>,
+    /// Les références qu'un sélecteur choisit et qu'un libellé nomme ; vide tant que
+    /// [`Ecran::avec_references`] ne les a pas branchées, et toujours sur la démonstration.
+    pub references: Vec<ReferenceEcran>,
     /// Les libellés de l'écran.
     pub textes: Textes,
     /// Ce que l'ancre de la table de routage reçoit.
@@ -376,6 +415,7 @@ impl Ecran {
             champs,
             lignes,
             api: None,
+            references: Vec::new(),
             textes: Textes::of(lang),
         }
     }
@@ -494,8 +534,50 @@ impl Ecran {
             champs,
             lignes: Vec::new(),
             api: Some(api),
+            references: Vec::new(),
             textes: Textes::of(lang),
         }
+    }
+
+    /// Branche les références que le plan a pu résoudre ; celles qui restent en texte
+    /// gardent le champ de saisie et la colonne brute.
+    ///
+    /// Une colonne référence n'est plus triable : elle se lit par le libellé de la cible,
+    /// et un tri sur l'identifiant sous-jacent rangerait les lignes dans un ordre que
+    /// l'opérateur ne voit pas.
+    pub(crate) fn avec_references(mut self, issues: &[Issue]) -> Self {
+        for issue in issues {
+            let Issue::Selecteur(fiche) = issue else {
+                continue;
+            };
+            let optionnel = self
+                .champs
+                .iter()
+                .find(|champ| champ.cle == fiche.cle)
+                .is_some_and(|champ| champ.optionnel);
+
+            for colonne in self.colonnes.iter_mut().filter(|c| c.cle == fiche.cle) {
+                colonne.rendu = "reference".to_string();
+                colonne.libelle = fiche.entete.clone();
+                colonne.triable = false;
+            }
+            for propriete in self.proprietes.iter_mut().filter(|p| p.cle == fiche.cle) {
+                propriete.rendu = "reference".to_string();
+                propriete.libelle = fiche.entete.clone();
+            }
+            for champ in self.champs.iter_mut().filter(|c| c.cle == fiche.cle) {
+                champ.composant = "reference".to_string();
+                champ.libelle = fiche.entete.clone();
+            }
+            self.references.push(ReferenceEcran {
+                cle: fiche.cle.clone(),
+                methode: fiche.methode.clone(),
+                libelle: fiche.libelle.clone(),
+                optionnel,
+            });
+        }
+        self.composants = composants(&self.champs, self.filtrable);
+        self
     }
 
     /// Le fichier de l'écran, relatif à la racine du projet.
@@ -821,6 +903,7 @@ mod tests {
 
     use super::*;
     use crate::generate::fields;
+    use crate::generate::reference::{Fiche, Issue};
     use crate::template::Renderer;
 
     /// Où vit l'écran patron, dans le fragment qui le dépose.
@@ -1310,6 +1393,177 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    fn avec_ticket() -> Ecran {
+        let feature = Feature::fresh(
+            "commentaires",
+            fields::parse("corps:text,ticket:references:tickets,auteur:references:users:optional")
+                .expect("valide"),
+        );
+        let issues = vec![
+            Issue::Selecteur(Fiche {
+                cle: "ticket_id".into(),
+                entete: "Ticket".into(),
+                methode: "ticketsFilter".into(),
+                libelle: Some("sujet".into()),
+            }),
+            Issue::Selecteur(Fiche {
+                cle: "auteur_id".into(),
+                entete: "Auteur".into(),
+                methode: "usersFilter".into(),
+                libelle: Some("email".into()),
+            }),
+        ];
+        Ecran::pour(&feature, Lang::Fr).avec_references(&issues)
+    }
+
+    #[test]
+    fn a_reference_column_is_read_by_its_label_and_is_not_sortable() {
+        let ecran = avec_ticket();
+        let colonne = ecran
+            .colonnes
+            .iter()
+            .find(|c| c.cle == "ticket_id")
+            .expect("colonne");
+
+        assert_eq!(colonne.rendu, "reference");
+        assert_eq!(colonne.libelle, "Ticket");
+        assert!(!colonne.triable);
+    }
+
+    #[test]
+    fn a_reference_field_is_chosen_not_typed() {
+        let rendu = rendu(&avec_ticket());
+
+        assert!(
+            rendu.contains("import ChoixReference from '@/admin/references/ChoixReference.vue'"),
+            "{rendu}"
+        );
+        assert!(
+            rendu.contains(":chercher=\"REFERENCES.ticket_id.chercher\""),
+            "{rendu}"
+        );
+        assert!(rendu.contains("api.ticketsFilter("), "{rendu}");
+        assert!(
+            rendu.contains("sujet: motif === '' ? undefined : { contains: motif }"),
+            "{rendu}"
+        );
+        assert!(rendu.contains("id: { in: ids }"), "{rendu}");
+    }
+
+    #[test]
+    fn an_optional_reference_offers_to_clear_it() {
+        let rendu = rendu(&avec_ticket());
+
+        let auteur = rendu
+            .split("id=\"champ-auteur_id\"")
+            .nth(1)
+            .and_then(|suite| suite.split("/>").next())
+            .expect("le sélecteur de l'auteur est rendu");
+        let ticket = rendu
+            .split("id=\"champ-ticket_id\"")
+            .nth(1)
+            .and_then(|suite| suite.split("/>").next())
+            .expect("le sélecteur du ticket est rendu");
+
+        assert!(
+            auteur.contains("optionnel"),
+            "l'auteur est facultatif : {auteur}"
+        );
+        assert!(
+            !ticket.contains("optionnel"),
+            "le ticket est requis : {ticket}"
+        );
+    }
+
+    /// Sans colonne libellé, la recherche n'a rien où chercher le motif : le paramètre
+    /// reste, mais nommé pour que `noUnusedParameters` ne l'arrête pas.
+    #[test]
+    fn a_reference_without_a_label_column_reads_its_shortened_identifier() {
+        let mut ecran = avec_ticket();
+        ecran.references[1].libelle = None;
+        let rendu = rendu(&ecran);
+
+        let auteur = rendu
+            .split("  auteur_id: {")
+            .nth(1)
+            .and_then(|suite| suite.split("\n  },").next())
+            .expect("la référence de l'auteur est rendue");
+        assert!(auteur.contains("async (_motif: string)"), "{auteur}");
+        assert!(!auteur.contains("motif ==="), "{auteur}");
+        assert!(auteur.contains("libelle: courte(ligne.id)"), "{auteur}");
+        assert!(
+            rendu.contains("async (motif: string)"),
+            "le ticket cherche : {rendu}"
+        );
+    }
+
+    #[test]
+    fn a_reference_left_as_text_keeps_the_text_input() {
+        let feature = Feature::fresh(
+            "sessions",
+            fields::parse("jeton:references:refresh_tokens").expect("valide"),
+        );
+        let issues = vec![Issue::Texte];
+        let rendu = rendu(&Ecran::pour(&feature, Lang::Fr).avec_references(&issues));
+
+        assert!(!rendu.contains("ChoixReference"), "{rendu}");
+        assert!(rendu.contains("id=\"champ-jeton_id\""), "{rendu}");
+    }
+
+    /// Le rendu de la démonstration, figé avant que le patron n'apprenne les références.
+    ///
+    /// Figé dans la crate et non lu dans `examples/` : l'exemple se régénère avec le
+    /// patron, et comparer le patron à sa propre sortie ne prouverait rien. Ce fichier-ci
+    /// ne bouge que si l'on décide que la démonstration doit bouger.
+    #[test]
+    fn the_demonstration_screen_does_not_move_by_a_byte() {
+        assert_eq!(
+            rendu(&Ecran::demonstration(Lang::Fr)),
+            include_str!("ecran/demonstration.fr.vue")
+        );
+    }
+
+    /// Le fragment dépose les deux fichiers génériques que la commande dépose quand ils
+    /// manquent, depuis les mêmes templates : deux sources divergeraient.
+    #[test]
+    fn the_fragment_lays_the_very_generic_files_the_command_lays() {
+        let source =
+            crate::templates::Source::feature(None, "frontend-admin").expect("le fragment s'ouvre");
+        let (manifeste, fichiers) = source.manifest_and_files().expect("le fragment se lit");
+        let manifeste = crate::manifest::read(
+            &manifeste.expect("le fragment porte un manifeste"),
+            "frontend-admin/feature.toml",
+        )
+        .expect("le manifeste embarqué est valide");
+        let depose = crate::add::installation::a_deposer("frontend-admin", &manifeste, &fichiers)
+            .expect("les templates du fragment sont là");
+
+        for (destination, template) in GENERIQUES {
+            let (_, deposee, _) = depose
+                .iter()
+                .find(|(chemin, _, _)| chemin == destination)
+                .unwrap_or_else(|| panic!("le fragment ne dépose pas {destination}"));
+            assert_eq!(*deposee, template, "{destination} diverge");
+        }
+    }
+
+    /// Le sélecteur parle la langue du projet, et ses deux fichiers se rendent dans l'une
+    /// comme dans l'autre.
+    #[test]
+    fn the_generic_files_speak_the_language_of_the_project() {
+        for (lang, temoin) in [(Lang::Fr, "Aucune correspondance"), (Lang::En, "No match")] {
+            let (_, selecteur) = GENERIQUES[0];
+            let rendu = Renderer::new()
+                .render(selecteur, context! { lang => lang.name() })
+                .expect("le sélecteur se rend");
+            assert!(rendu.contains(temoin), "{lang:?} : {rendu}");
+
+            Renderer::new()
+                .render(GENERIQUES[1].1, context! { lang => lang.name() })
+                .expect("les libellés se rendent");
         }
     }
 }

@@ -3950,7 +3950,7 @@ mod tests {
     /// Il pose ses fichiers *dans* l'arbre du socle : une seule application, deux régimes
     /// de route. Un fichier du socle redéposé ici ferait un conflit de plan, et non une
     /// installation.
-    const SHELL: [&str; 19] = [
+    const SHELL: [&str; 21] = [
         "frontend/src/api/jetons.ts",
         "frontend/src/api/entetes.ts",
         "frontend/src/stores/authentification.ts",
@@ -3961,6 +3961,8 @@ mod tests {
         "frontend/src/admin/document.ts",
         "frontend/src/admin/textes.ts",
         "frontend/src/admin/lien.ts",
+        "frontend/src/admin/references/ChoixReference.vue",
+        "frontend/src/admin/references/libelles.ts",
         "frontend/src/admin/Shell.vue",
         "frontend/src/admin/vues/Connexion.vue",
         "frontend/src/admin/vues/Inscription.vue",

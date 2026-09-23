@@ -1,17 +1,10 @@
 <script setup lang="ts">
-{%- if ecran.api %}
-import type { {@ ecran.api.reponse @} } from '@/api/client'
-{% endif %}
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
-{% if ecran.api %}import { api, phrase } from '@/api'
-{% endif %}{% if ecran.references %}import ChoixReference from '@/admin/references/ChoixReference.vue'
-import { courte, resoudre, type Entree } from '@/admin/references/libelles'
-{% endif %}import Bande from '@/components/Bande.vue'
+import Bande from '@/components/Bande.vue'
 import { Button } from '@/components/ui/button'
-{% if 'checkbox' in ecran.composants %}import { Checkbox } from '@/components/ui/checkbox'
-{% endif %}import {
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -19,16 +12,16 @@ import { Button } from '@/components/ui/button'
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-{% if 'input' in ecran.composants %}import { Input } from '@/components/ui/input'
-{% endif %}{% if 'label' in ecran.composants %}import { Label } from '@/components/ui/label'
-{% endif %}{% if 'select' in ecran.composants %}import {
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-{% endif %}import {
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -54,39 +47,39 @@ import { useInterface } from '@/stores/interface'
  * deux pour toute l'administration.
  */
 const TEXTES = {
-  titre: '{@ ecran.titre @}',
-  sous_titre: '{@ ecran.sous_titre @}',
-  filtre: '{@ ecran.textes.filtre @}',
-  lignes: '{@ ecran.textes.lignes @}',
-  aucune: '{@ ecran.textes.aucune @}',
-  chargement: '{@ ecran.textes.chargement @}',
-  erreur: '{@ ecran.textes.erreur @}',
-  page: '{@ ecran.textes.page @}',
-  sur: '{@ ecran.textes.sur @}',
-  precedent: '{@ ecran.textes.precedent @}',
-  suivant: '{@ ecran.textes.suivant @}',
-  actions: '{@ ecran.textes.actions @}',
-  creer: '{@ ecran.textes.creer @}',
-  modifier: '{@ ecran.textes.modifier @}',
-  supprimer: '{@ ecran.textes.supprimer @}',
-  detail: '{@ ecran.textes.detail @}',
-  enregistrer: '{@ ecran.textes.enregistrer @}',
-  enregistrement: '{@ ecran.textes.enregistrement @}',
-  annuler: '{@ ecran.textes.annuler @}',
-  suppression_titre: '{@ ecran.textes.suppression_titre @}',
-  suppression_detail: '{@ ecran.textes.suppression_detail @}',
-  enregistree: '{@ ecran.textes.enregistree @}',
-  supprimee: '{@ ecran.textes.supprimee @}',
-  refus_enregistrement: '{@ ecran.textes.refus_enregistrement @}',
-  refus_suppression: '{@ ecran.textes.refus_suppression @}',
-  introuvable: '{@ ecran.textes.introuvable @}',
-  vide: '{@ ecran.textes.vide @}',
-  oui: '{@ ecran.textes.oui @}',
-  non: '{@ ecran.textes.non @}',
+  titre: 'Démonstration',
+  sous_titre: 'Cet écran est le patron dont sortent les écrans engendrés. Ses lignes vivent dans le fichier : aucune table ne les porte encore.',
+  filtre: 'Filtrer',
+  lignes: 'lignes',
+  aucune: 'Aucune ligne ne correspond',
+  chargement: 'Chargement…',
+  erreur: 'La source est injoignable.',
+  page: 'Page',
+  sur: 'sur',
+  precedent: 'Précédent',
+  suivant: 'Suivant',
+  actions: 'Actions',
+  creer: 'Nouvelle ligne',
+  modifier: 'Modifier',
+  supprimer: 'Supprimer',
+  detail: 'Détail',
+  enregistrer: 'Enregistrer',
+  enregistrement: 'Enregistrement…',
+  annuler: 'Annuler',
+  suppression_titre: 'Supprimer cette ligne',
+  suppression_detail: 'La ligne part de la table, et le geste ne se reprend pas.',
+  enregistree: 'Ligne enregistrée.',
+  supprimee: 'Ligne supprimée.',
+  refus_enregistrement: 'Enregistrement refusé.',
+  refus_suppression: 'Suppression refusée.',
+  introuvable: 'Ligne introuvable.',
+  vide: '—',
+  oui: 'Oui',
+  non: 'Non',
 } as const
 
 /** Combien de lignes une page porte. */
-const TAILLE = {@ ecran.taille @}
+const TAILLE = 5
 
 /** La colonne sur laquelle la table est triée, et dans quel sens. */
 interface Tri {
@@ -96,9 +89,7 @@ interface Tri {
 
 /** Ce que l'écran demande à sa source pour remplir une page. */
 interface Requete {
-{%- if ecran.filtrable %}
   filtre: string
-{%- endif %}
   tri: Tri | null
   page: number
   taille: number
@@ -106,29 +97,26 @@ interface Requete {
 
 /** Une ligne de la table, une propriété par colonne du corps. */
 interface Ligne {
-{%- for propriete in ecran.proprietes %}
-  {@ propriete.cle @}: {@ propriete.type_base @}{% if propriete.optionnel %} | null{% endif %}
-{%- endfor %}
+  reference: string
+  libelle: string
+  etat: 'actif' | 'archivé' | 'brouillon'
+  maj: string
 }
 
 /** Ce que le formulaire saisit : un booléen par case, une chaîne partout ailleurs. */
 interface Formulaire {
-{%- for champ in ecran.champs %}
-  {@ champ.cle @}: {% if champ.composant == 'checkbox' %}boolean{% else %}string{% endif %}
-{%- endfor %}
+  reference: string
+  libelle: string
+  etat: string
+  maj: string
 }
 
 /** Un formulaire vierge : ce qu'ouvre la création. */
 const VIERGE: Formulaire = {
-{%- for champ in ecran.champs %}
-{%- if champ.composant == 'checkbox' %}
-  {@ champ.cle @}: false,
-{%- elif champ.composant == 'select' and not champ.optionnel %}
-  {@ champ.cle @}: '{@ champ.valeurs[0] @}',
-{%- else %}
-  {@ champ.cle @}: '',
-{%- endif %}
-{%- endfor %}
+  reference: '',
+  libelle: '',
+  etat: 'actif',
+  maj: '',
 }
 
 /**
@@ -138,61 +126,22 @@ const VIERGE: Formulaire = {
  * lecture qui laisse remettre à zéro une colonne facultative depuis le formulaire. Un
  * instant repart au fuseau que le contrat attend, et que le contrôle natif ne porte pas.
  */
-function corps({% if ecran.champs %}formulaire{% else %}_formulaire{% endif %}: Formulaire) {
+function corps(formulaire: Formulaire) {
   return {
-{%- for champ in ecran.champs %}
-{%- if champ.controle == 'booleen' %}
-    {@ champ.cle @}: formulaire.{@ champ.cle @},
-{%- elif champ.controle == 'nombre' %}
-    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : Number(formulaire.{@ champ.cle @}){% else %}Number(formulaire.{@ champ.cle @}){% endif %},
-{%- elif champ.controle == 'instant' %}
-    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : new Date(formulaire.{@ champ.cle @}).toISOString(){% else %}new Date(formulaire.{@ champ.cle @}).toISOString(){% endif %},
-{%- elif champ.controle == 'liste' %}
-    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : (formulaire.{@ champ.cle @} as {@ champ.type_base @}){% else %}formulaire.{@ champ.cle @} as {@ champ.type_base @}{% endif %},
-{%- else %}
-    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : formulaire.{@ champ.cle @}{% else %}formulaire.{@ champ.cle @}{% endif %},
-{%- endif %}
-{%- endfor %}
+    reference: formulaire.reference,
+    libelle: formulaire.libelle,
+    etat: formulaire.etat as 'actif' | 'archivé' | 'brouillon',
+    maj: formulaire.maj,
   }
 }
 
-{% if 'saisie' in ecran.formats -%}
-/**
- * L'instant du contrat, tel que le contrôle natif le prend.
- *
- * `datetime-local` ne porte pas de fuseau : ce qu'il affiche, il le lit comme une heure
- * locale, et c'est ainsi que [`corps`] la relit. Un horodatage UTC simplement tronqué y
- * entrerait donc décalé, et ressortirait décalé une seconde fois — ouvrir puis enregistrer
- * une ligne sans toucher au champ aurait suffi à la déplacer.
- */
-function pourControle(iso: string | null): string {
-  if (iso === null || iso === '') {
-    return ''
-  }
-
-  const instant = new Date(iso)
-  if (Number.isNaN(instant.getTime())) {
-    return ''
-  }
-
-  return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
-
-{% endif -%}
 /** Le formulaire prérempli d'une ligne existante. */
-function saisie({% if ecran.champs %}ligne{% else %}_ligne{% endif %}: Ligne): Formulaire {
+function saisie(ligne: Ligne): Formulaire {
   return {
-{%- for champ in ecran.champs %}
-{%- if champ.controle == 'booleen' %}
-    {@ champ.cle @}: ligne.{@ champ.cle @},
-{%- elif champ.controle == 'nombre' %}
-    {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} === null ? '' : String(ligne.{@ champ.cle @}){% else %}String(ligne.{@ champ.cle @}){% endif %},
-{%- elif champ.controle == 'instant' %}
-    {@ champ.cle @}: pourControle(ligne.{@ champ.cle @}),
-{%- else %}
-    {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} ?? ''{% else %}ligne.{@ champ.cle @}{% endif %},
-{%- endif %}
-{%- endfor %}
+    reference: ligne.reference,
+    libelle: ligne.libelle,
+    etat: ligne.etat,
+    maj: ligne.maj,
   }
 }
 
@@ -200,106 +149,19 @@ function saisie({% if ecran.champs %}ligne{% else %}_ligne{% endif %}: Ligne): F
 // dépende d'un contrat : tout ce qui suit — filtre, tri, pagination, formulaire, détail,
 // rendu — ne connaît que `Ligne`, `Requete` et `Formulaire`, et ne change pas d'une table
 // à l'autre.
-{%- if ecran.api %}
 
-/** La ligne que la table affiche, tirée du corps que le contrat rend. */
-function depuis(recu: {@ ecran.api.reponse @}): Ligne {
-  return {
-{%- for propriete in ecran.proprietes %}
-    {@ propriete.cle @}: recu.{@ propriete.cle @}{% if propriete.optionnel %} ?? null{% endif %},
-{%- endfor %}
-  }
-}
-
-async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: number }> {
-  const ordre = requete.tri
-{%- if ecran.filtrable %}
-  const motif = requete.filtre.trim()
-{%- endif %}
-
-  // La route de filtre et non celle de liste : elle porte les conditions dans son corps,
-  // et garde ses pages même quand la liste pagine par curseur.
-  const recue = await api.{@ ecran.api.liste @}(
-    {
-      sort: ordre === null ? undefined : [ordre.sens === 'asc' ? ordre.cle : `-${ordre.cle}`],
-{%- if ecran.filtrable %}
-      {@ ecran.api.recherche @}: motif === '' ? undefined : { contains: motif },
-{%- endif %}
-    },
-    { page: requete.page, per_page: requete.taille },
-  )
-
-  return { lignes: recue.data.map(depuis), total: recue.meta.total }
-}
-
-async function lire(cle: string): Promise<Ligne> {
-  return depuis(await api.{@ ecran.api.lire @}(cle))
-}
-
-async function enregistrer(cle: string | null, formulaire: Formulaire): Promise<void> {
-  if (cle === null) {
-    await api.{@ ecran.api.creer @}(corps(formulaire))
-  } else {
-    await api.{@ ecran.api.modifier @}(cle, corps(formulaire))
-  }
-}
-
-async function supprimer(cle: string): Promise<void> {
-  await api.{@ ecran.api.supprimer @}(cle)
-}
-
-/** La phrase que porte une panne, ou `defaut` quand elle n'en porte pas. */
-function raison(cause: unknown, defaut: string): string {
-  return phrase(cause, defaut)
-}
-{%- if ecran.references %}
-
-/**
- * Les tables que cet écran référence : comment en chercher les lignes par leur libellé, et
- * comment en relire une page par identifiants.
- */
-const REFERENCES = {
-{%- for reference in ecran.references %}
-  {@ reference.cle @}: {
-    chercher: async ({% if reference.libelle %}motif{% else %}_motif{% endif %}: string): Promise<Entree[]> =>
-      (
-        await api.{@ reference.methode @}(
-          {% if reference.libelle %}{ {@ reference.libelle @}: motif === '' ? undefined : { contains: motif } }{% else %}{}{% endif %},
-          { page: 1, per_page: 20 },
-        )
-      ).data.map((ligne) => ({ cle: ligne.id, libelle: {% if reference.libelle %}ligne.{@ reference.libelle @} ?? courte(ligne.id){% else %}courte(ligne.id){% endif %} })),
-    lire: async (ids: string[]): Promise<Entree[]> =>
-      (
-        await api.{@ reference.methode @}({ id: { in: ids } }, { page: 1, per_page: ids.length })
-      ).data.map((ligne) => ({ cle: ligne.id, libelle: {% if reference.libelle %}ligne.{@ reference.libelle @} ?? courte(ligne.id){% else %}courte(ligne.id){% endif %} })),
-  },
-{%- endfor %}
-} as const
-
-/** Les libellés résolus, par colonne puis par identifiant. */
-const libelles = ref<Record<string, Map<string, string>>>({})
-
-/** Relit les libellés des lignes montrées, une requête par colonne référence. */
-async function nommer(montrees: readonly Ligne[]): Promise<void> {
-  for (const [cle, reference] of Object.entries(REFERENCES)) {
-    const ids = montrees.map((ligne) => ligne[cle as keyof Ligne] as string | null)
-    libelles.value = { ...libelles.value, [cle]: await resoudre(reference.lire, ids) }
-  }
-}
-
-/** Ce que l'opérateur lit d'une cellule : le libellé d'une référence, sinon la valeur. */
-function lisible(cle: keyof Ligne, valeur: string | number | boolean | null, rendu: Rendu): string {
-  if (rendu === 'reference' && typeof valeur === 'string') {
-    return libelles.value[cle]?.get(valeur) ?? courte(valeur)
-  }
-  return afficher(valeur, rendu)
-}
-{%- endif %}
-{%- else %}
-
-const SOURCE: Ligne[] = [{% for ligne in ecran.lignes %}
-  {@ ligne @},
-{%- endfor %}
+const SOURCE: Ligne[] = [
+  { reference: 'DEM-001', libelle: 'Bordereau', etat: 'actif', maj: '2026-01-01' },
+  { reference: 'DEM-002', libelle: 'Relevé', etat: 'archivé', maj: '2026-02-04' },
+  { reference: 'DEM-003', libelle: 'Inventaire', etat: 'brouillon', maj: '2026-03-07' },
+  { reference: 'DEM-004', libelle: 'Journal', etat: 'actif', maj: '2026-04-10' },
+  { reference: 'DEM-005', libelle: 'Facture', etat: 'archivé', maj: '2026-05-13' },
+  { reference: 'DEM-006', libelle: 'Carnet', etat: 'brouillon', maj: '2026-06-16' },
+  { reference: 'DEM-007', libelle: 'Registre', etat: 'actif', maj: '2026-01-19' },
+  { reference: 'DEM-008', libelle: 'Feuille', etat: 'archivé', maj: '2026-02-22' },
+  { reference: 'DEM-009', libelle: 'Ruban', etat: 'brouillon', maj: '2026-03-25' },
+  { reference: 'DEM-010', libelle: 'Listing', etat: 'actif', maj: '2026-04-01' },
+  { reference: 'DEM-011', libelle: 'Bandeau', etat: 'archivé', maj: '2026-05-04' },
 ]
 
 async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: number }> {
@@ -323,7 +185,7 @@ async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: n
 }
 
 async function lire(cle: string): Promise<Ligne> {
-  const trouvee = SOURCE.find((ligne) => ligne.{@ ecran.cle @} === cle)
+  const trouvee = SOURCE.find((ligne) => ligne.reference === cle)
 
   if (trouvee === undefined) {
     throw new Error(TEXTES.introuvable)
@@ -334,7 +196,7 @@ async function lire(cle: string): Promise<Ligne> {
 
 async function enregistrer(cle: string | null, formulaire: Formulaire): Promise<void> {
   const rang =
-    cle === null ? -1 : SOURCE.findIndex((ligne) => ligne.{@ ecran.cle @} === cle)
+    cle === null ? -1 : SOURCE.findIndex((ligne) => ligne.reference === cle)
 
   if (rang === -1) {
     SOURCE.push(corps(formulaire))
@@ -344,7 +206,7 @@ async function enregistrer(cle: string | null, formulaire: Formulaire): Promise<
 }
 
 async function supprimer(cle: string): Promise<void> {
-  const rang = SOURCE.findIndex((ligne) => ligne.{@ ecran.cle @} === cle)
+  const rang = SOURCE.findIndex((ligne) => ligne.reference === cle)
 
   if (rang !== -1) {
     SOURCE.splice(rang, 1)
@@ -355,7 +217,6 @@ async function supprimer(cle: string): Promise<void> {
 function raison(cause: unknown, defaut: string): string {
   return cause instanceof Error ? cause.message : defaut
 }
-{%- endif %}
 
 /**
  * Comment une valeur se lit : telle quelle, en jour, ou en date et heure.
@@ -364,7 +225,7 @@ function raison(cause: unknown, defaut: string): string {
  * la propriété ne suffirait pas à les reconnaître — une date y est une chaîne comme une
  * autre — et la table les rendrait bruts.
  */
-type Rendu = 'texte' | 'date' | 'instant'{% if ecran.references %} | 'reference'{% endif %}
+type Rendu = 'texte' | 'date' | 'instant'
 
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
@@ -374,22 +235,24 @@ interface Colonne {
   triable: boolean
 }
 
-const COLONNES: readonly Colonne[] = [{% for colonne in ecran.colonnes %}
-  { cle: '{@ colonne.cle @}', libelle: '{@ colonne.libelle @}', rendu: '{@ colonne.rendu @}', triable: {% if colonne.triable %}true{% else %}false{% endif %} },
-{%- endfor %}
+const COLONNES: readonly Colonne[] = [
+  { cle: 'reference', libelle: 'Référence', rendu: 'texte', triable: true },
+  { cle: 'libelle', libelle: 'Libellé', rendu: 'texte', triable: true },
+  { cle: 'etat', libelle: 'État', rendu: 'texte', triable: false },
+  { cle: 'maj', libelle: 'Mise à jour', rendu: 'date', triable: true },
 ]
 
 /** Les propriétés du détail : la ligne entière, et non le seul sous-ensemble affiché. */
-const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[] = [{% for propriete in ecran.proprietes %}
-  { cle: '{@ propriete.cle @}', libelle: '{@ propriete.libelle @}', rendu: '{@ propriete.rendu @}' },
-{%- endfor %}
+const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[] = [
+  { cle: 'reference', libelle: 'Référence', rendu: 'texte' },
+  { cle: 'libelle', libelle: 'Libellé', rendu: 'texte' },
+  { cle: 'etat', libelle: 'État', rendu: 'texte' },
+  { cle: 'maj', libelle: 'Mise à jour', rendu: 'date' },
 ]
 
 const interfaces = useInterface()
 
-{% if ecran.filtrable -%}
 const filtre = ref('')
-{% endif -%}
 const tri = ref<Tri | null>(null)
 const page = ref(1)
 
@@ -424,9 +287,7 @@ const pages = computed(() => Math.max(1, Math.ceil(total.value / TAILLE)))
 // première page, et veiller sur chacun d'eux séparément relancerait deux fois la même
 // interrogation pour un seul geste de l'opérateur.
 const requete = computed<Requete>(() => ({
-{%- if ecran.filtrable %}
   filtre: filtre.value,
-{%- endif %}
   tri: tri.value,
   page: page.value,
   taille: TAILLE,
@@ -442,8 +303,7 @@ async function charger(): Promise<void> {
     const reponse = await interroger(requete.value)
     lignes.value = reponse.lignes
     total.value = reponse.total
-{% if ecran.references %}    void nommer(reponse.lignes)
-{% endif %}  } catch (cause) {
+  } catch (cause) {
     lignes.value = []
     total.value = 0
     faute.value = raison(cause, TEXTES.erreur)
@@ -451,12 +311,12 @@ async function charger(): Promise<void> {
     enCours.value = false
   }
 }
-{% if ecran.filtrable %}
+
 function filtrer(valeur: string | number): void {
   filtre.value = String(valeur)
   page.value = 1
 }
-{% endif %}
+
 // Trois états et non deux : la troisième pression rend la colonne au tri naturel de la
 // source, que rien d'autre ne saurait retrouver.
 function trier(cle: keyof Ligne): void {
@@ -481,7 +341,7 @@ function creer(): void {
 }
 
 function modifier(ligne: Ligne): void {
-  modifiee.value = ligne.{@ ecran.cle @}
+  modifiee.value = ligne.reference
   valeurs.value = saisie(ligne)
   fauteFormulaire.value = null
   formulaireOuvert.value = true
@@ -511,8 +371,7 @@ async function detailler(cle: string): Promise<void> {
 
   try {
     detaillee.value = await lire(cle)
-{% if ecran.references %}    void nommer([detaillee.value])
-{% endif %}  } catch (cause) {
+  } catch (cause) {
     fauteDetail.value = raison(cause, TEXTES.introuvable)
   } finally {
     detailEnCours.value = false
@@ -545,27 +404,12 @@ async function confirmer(): Promise<void> {
   }
 }
 
-{% set horodate = 'date' in ecran.formats or 'instant' in ecran.formats -%}
-{% if 'instant' in ecran.formats -%}
-/**
- * Le format des instants, construit une fois : un `Intl.DateTimeFormat` neuf par cellule
- * coûterait sa table de locale à chaque rendu de page.
- *
- * Le fuseau est celui de l'opérateur — un horodatage se lit à l'heure où l'on est, pas à
- * Greenwich — mais la locale est celle du projet, comme tous les libellés de cet écran.
- */
-const INSTANT = new Intl.DateTimeFormat('{@ ecran.locale @}', { dateStyle: 'short', timeStyle: 'short' })
-
-{% endif -%}
-{% if 'date' in ecran.formats -%}
 /**
  * Le format des jours, à Greenwich et non au fuseau de l'opérateur : une date nue vaut
  * minuit UTC, que tout fuseau à l'ouest ramènerait à la veille.
  */
-const JOUR = new Intl.DateTimeFormat('{@ ecran.locale @}', { dateStyle: 'short', timeZone: 'UTC' })
+const JOUR = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeZone: 'UTC' })
 
-{% endif -%}
-{% if horodate -%}
 /** L'horodatage rendu lisible, ou tel quel si rien ne sait le lire. */
 function horodate(brut: string, format: Intl.DateTimeFormat): string {
   const instant = new Date(brut)
@@ -573,25 +417,17 @@ function horodate(brut: string, format: Intl.DateTimeFormat): string {
   return Number.isNaN(instant.getTime()) ? brut : format.format(instant)
 }
 
-{% endif -%}
 /** Ce que l'opérateur lit d'une valeur : un booléen se dit, une absence se marque. */
-function afficher(valeur: string | number | boolean | null, {% if horodate %}rendu{% else %}_rendu{% endif %}: Rendu): string {
+function afficher(valeur: string | number | boolean | null, rendu: Rendu): string {
   if (valeur === null) {
     return TEXTES.vide
   }
   if (typeof valeur === 'boolean') {
     return valeur ? TEXTES.oui : TEXTES.non
   }
-{%- if 'instant' in ecran.formats %}
-  if (rendu === 'instant') {
-    return horodate(String(valeur), INSTANT)
-  }
-{%- endif %}
-{%- if 'date' in ecran.formats %}
   if (rendu === 'date') {
     return horodate(String(valeur), JOUR)
   }
-{%- endif %}
 
   return String(valeur)
 }
@@ -612,7 +448,6 @@ function afficher(valeur: string | number | boolean | null, {% if horodate %}ren
 
     <Bande>
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-{%- if ecran.filtrable %}
         <Input
           class="max-w-xs"
           :model-value="filtre"
@@ -620,7 +455,6 @@ function afficher(valeur: string | number | boolean | null, {% if horodate %}ren
           :aria-label="TEXTES.filtre"
           @update:model-value="filtrer"
         />
-{%- endif %}
         <p class="text-sm text-muted-foreground" role="status">
           {{ total }} {{ TEXTES.lignes }}
         </p>
@@ -662,28 +496,18 @@ function afficher(valeur: string | number | boolean | null, {% if horodate %}ren
             {{ enCours ? TEXTES.chargement : (faute ?? TEXTES.aucune) }}
           </TableEmpty>
           <template v-else>
-            <TableRow v-for="ligne in lignes" :key="ligne.{@ ecran.cle @}">
-{%- if ecran.references %}
-              <TableCell
-                v-for="colonne in COLONNES"
-                :key="colonne.cle"
-                :title="colonne.rendu === 'reference' ? String(ligne[colonne.cle] ?? '') : undefined"
-              >
-                {{ lisible(colonne.cle, ligne[colonne.cle], colonne.rendu) }}
-              </TableCell>
-{%- else %}
+            <TableRow v-for="ligne in lignes" :key="ligne.reference">
               <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
                 {{ afficher(ligne[colonne.cle], colonne.rendu) }}
               </TableCell>
-{%- endif %}
               <TableCell class="whitespace-nowrap text-right">
-                <Button variant="ghost" size="sm" @click="detailler(ligne.{@ ecran.cle @})">
+                <Button variant="ghost" size="sm" @click="detailler(ligne.reference)">
                   {{ TEXTES.detail }}
                 </Button>
                 <Button variant="ghost" size="sm" @click="modifier(ligne)">
                   {{ TEXTES.modifier }}
                 </Button>
-                <Button variant="ghost" size="sm" @click="demander(ligne.{@ ecran.cle @})">
+                <Button variant="ghost" size="sm" @click="demander(ligne.reference)">
                   {{ TEXTES.supprimer }}
                 </Button>
               </TableCell>
@@ -719,50 +543,52 @@ function afficher(valeur: string | number | boolean | null, {% if horodate %}ren
         </DialogHeader>
 
         <form class="flex flex-col gap-5" novalidate @submit.prevent="soumettre">
-{%- for champ in ecran.champs %}
           <div class="flex flex-col gap-2">
-            <Label for="champ-{@ champ.cle @}">{@ champ.libelle @}</Label>
-{%- if champ.composant == 'checkbox' %}
-            <Checkbox
-              id="champ-{@ champ.cle @}"
-              :model-value="valeurs.{@ champ.cle @}"
-              @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = valeur === true)"
+            <Label for="champ-reference">Référence</Label>
+            <Input
+              id="champ-reference"
+              type="text"
+              :model-value="valeurs.reference"
+              required
+              @update:model-value="(valeur) => (valeurs.reference = String(valeur))"
             />
-{%- elif champ.composant == 'select' %}
+          </div>
+          <div class="flex flex-col gap-2">
+            <Label for="champ-libelle">Libellé</Label>
+            <Input
+              id="champ-libelle"
+              type="text"
+              :model-value="valeurs.libelle"
+              required
+              @update:model-value="(valeur) => (valeurs.libelle = String(valeur))"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <Label for="champ-etat">État</Label>
             <Select
-              :model-value="valeurs.{@ champ.cle @}"
-              @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"
+              :model-value="valeurs.etat"
+              @update:model-value="(valeur) => (valeurs.etat = String(valeur))"
             >
-              <SelectTrigger id="champ-{@ champ.cle @}">
+              <SelectTrigger id="champ-etat">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-{%- for valeur in champ.valeurs %}
-                <SelectItem value="{@ valeur @}">{@ valeur @}</SelectItem>
-{%- endfor %}
+                <SelectItem value="actif">actif</SelectItem>
+                <SelectItem value="archivé">archivé</SelectItem>
+                <SelectItem value="brouillon">brouillon</SelectItem>
               </SelectContent>
             </Select>
-{%- elif champ.composant == 'reference' %}
-            <ChoixReference
-              id="champ-{@ champ.cle @}"
-              v-model="valeurs.{@ champ.cle @}"
-              :libelle="libelles.{@ champ.cle @}?.get(valeurs.{@ champ.cle @})"
-              :chercher="REFERENCES.{@ champ.cle @}.chercher"
-{%- if champ.optionnel %}
-              optionnel
-{%- endif %}
-            />
-{%- else %}
-            <Input
-              id="champ-{@ champ.cle @}"
-              type="{@ champ.type_html @}"
-              :model-value="valeurs.{@ champ.cle @}"
-              {% if not champ.optionnel %}required
-              {% endif %}@update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"
-            />
-{%- endif %}
           </div>
-{%- endfor %}
+          <div class="flex flex-col gap-2">
+            <Label for="champ-maj">Mise à jour</Label>
+            <Input
+              id="champ-maj"
+              type="date"
+              :model-value="valeurs.maj"
+              required
+              @update:model-value="(valeur) => (valeurs.maj = String(valeur))"
+            />
+          </div>
 
           <p v-if="fauteFormulaire" class="text-destructive" role="alert">
             {{ fauteFormulaire }}
@@ -798,13 +624,7 @@ function afficher(valeur: string | number | boolean | null, {% if horodate %}ren
             <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {{ propriete.libelle }}
             </dt>
-{%- if ecran.references %}
-            <dd class="break-all">
-              {{ lisible(propriete.cle, detaillee[propriete.cle], propriete.rendu) }}
-            </dd>
-{%- else %}
             <dd class="break-all">{{ afficher(detaillee[propriete.cle], propriete.rendu) }}</dd>
-{%- endif %}
           </div>
         </dl>
       </SheetContent>

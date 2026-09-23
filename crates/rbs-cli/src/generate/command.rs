@@ -557,12 +557,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .then(|| crate::ecran::Ecran::pour(&feature, crate::lang::Lang::of_project(&root)));
 
     // Calculées seulement si l'écran est émis : sans lui, aucun sélecteur n'existe pour
-    // qu'un repli s'y annonce. `issues` n'est pas encore branchée dans l'écran — elle le
-    // sera par le générateur qui rend ses champs.
-    let (_issues, replis) = match &ecran {
+    // qu'un repli s'y annonce.
+    let (issues, replis) = match &ecran {
         Some(_) => reference::fiches(&root, &feature, &entities),
         None => (Vec::new(), Vec::new()),
     };
+    let ecran = ecran.map(|ecran| ecran.avec_references(&issues));
 
     // Avant le rendu : l'écran de démonstration du fragment occupe déjà son fichier et sa
     // route. La condition porte sur le fichier autant que sur le nom — un développeur qui
@@ -575,6 +575,29 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             route: ecran.route.clone(),
             occupant: ecran.fichier(),
         });
+    }
+
+    // Le sélecteur et la résolution des libellés, que l'écran importe : un projet équipé du
+    // shell avant qu'ils n'existent ne les a pas, et l'écran ne compilerait pas sans eux.
+    // Jamais réécrits : une fois posés, ils appartiennent au projet.
+    let mut generiques = Vec::new();
+    if ecran
+        .as_ref()
+        .is_some_and(|ecran| !ecran.references.is_empty())
+    {
+        let lang = crate::lang::Lang::of_project(&root);
+        for (destination, template) in crate::ecran::GENERIQUES {
+            if root.join(destination).exists() {
+                continue;
+            }
+            let rendu = crate::template::Renderer::new()
+                .render(template, minijinja::context! { lang => lang.name() })
+                .map_err(|source| Error::Rendu {
+                    file: destination.to_string(),
+                    source,
+                })?;
+            generiques.push((destination, rendu));
+        }
     }
 
     let ecran_rendu = match &ecran {
@@ -597,6 +620,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         builder.create(path, content)?;
     }
     if let Some((path, content)) = &ecran_rendu {
+        builder.create(path, content)?;
+    }
+    for (path, content) in &generiques {
         builder.create(path, content)?;
     }
 
@@ -2750,6 +2776,84 @@ mod tests {
             rail.contains("{ route: 'admin-articles', libelle: 'Articles' },"),
             "{rail}"
         );
+    }
+
+    /// Un projet qui porte le shell, une table `tickets` engendrée et commitée : la cible
+    /// d'une référence qui expose sa route de filtre, donc qui reçoit un sélecteur.
+    fn project_with_tickets() -> (TempDir, PathBuf) {
+        let (parent, root) = project_with_admin();
+        commit(&root);
+        run(&options(&root, "tickets", Some("sujet:string"), true)).expect("tickets");
+        commit(&root);
+        (parent, root)
+    }
+
+    /// Le plan d'un crud dont un champ référence `tickets`.
+    fn plan_with_a_reference(root: &Path) -> plan::Plan {
+        plan_for(&options(
+            root,
+            "commentaires",
+            Some("corps:text,ticket:references:tickets"),
+            true,
+        ))
+        .expect("la planification aboutit")
+        .plan
+    }
+
+    /// Un projet équipé du shell avant que le sélecteur n'existe ne l'a pas : l'écran qui
+    /// l'importe ne compilerait pas, et la commande le dépose donc elle-même.
+    #[test]
+    fn a_crud_with_a_reference_lays_the_generic_files_when_they_are_missing() {
+        let (_parent, root) = project_with_tickets();
+        for (destination, _) in crate::ecran::GENERIQUES {
+            fs::remove_file(root.join(destination)).expect("le fichier se retire");
+        }
+        commit(&root);
+
+        let plan = plan_with_a_reference(&root);
+
+        for (destination, _) in crate::ecran::GENERIQUES {
+            let fichier = plan
+                .files()
+                .iter()
+                .find(|file| file.path == destination)
+                .unwrap_or_else(|| panic!("{destination} manque au plan"));
+            assert_eq!(fichier.before, None, "{destination} doit être créé");
+            assert_eq!(fichier.statut, crate::plan::Status::AFaire, "{destination}");
+        }
+        let ecran = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "frontend/src/admin/vues/Commentaires.vue")
+            .and_then(|file| file.after.clone())
+            .expect("l'écran figure au plan");
+        assert!(ecran.contains("<ChoixReference"), "{ecran}");
+    }
+
+    /// Posés, ils appartiennent au projet : le plan ne les nomme pas, retouchés ou non.
+    #[test]
+    fn a_crud_with_a_reference_leaves_the_generic_files_alone_when_present() {
+        let (_parent, root) = project_with_tickets();
+        let (destination, _) = crate::ecran::GENERIQUES[1];
+        fs::write(root.join(destination), "// retouché à la main\n").expect("écriture");
+        commit(&root);
+
+        let plan = plan_with_a_reference(&root);
+
+        for (destination, _) in crate::ecran::GENERIQUES {
+            assert!(
+                !plan.files().iter().any(|file| file.path == destination),
+                "{destination} ne doit pas figurer au plan"
+            );
+        }
+        // Sans quoi le test passerait à vide : une référence retombée en texte ne dépose rien.
+        let ecran = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "frontend/src/admin/vues/Commentaires.vue")
+            .and_then(|file| file.after.clone())
+            .expect("l'écran figure au plan");
+        assert!(ecran.contains("<ChoixReference"), "{ecran}");
     }
 
     /// Le préfixe de la table entre dans le relais du serveur de développement.
