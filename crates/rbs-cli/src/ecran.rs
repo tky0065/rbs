@@ -1581,6 +1581,63 @@ mod tests {
         );
     }
 
+    /// Seule la réponse de la dernière recherche lancée s'applique : la liste vide de
+    /// l'ouverture, arrivée après celle de la frappe, montrerait des lignes non filtrées.
+    #[test]
+    fn the_selector_applies_only_the_answer_to_its_latest_search() {
+        let rendu = selecteur_rendu();
+
+        let chercher = corps(
+            &rendu,
+            "async function chercher(motif: string): Promise<void> {",
+        );
+        assert!(chercher.contains("const numero = ++sequence"), "{chercher}");
+        assert_eq!(
+            chercher.matches("if (numero !== sequence) {").count(),
+            2,
+            "une réponse périmée, succès ou panne, s'applique encore :\n{chercher}"
+        );
+        assert!(!chercher.contains("resultats.value = await"), "{chercher}");
+        let declaration = rendu
+            .find("let sequence = 0")
+            .expect("sequence est déclarée");
+        let fonction = rendu
+            .find("async function chercher(")
+            .expect("chercher est rendue");
+        assert!(declaration < fonction, "{rendu}");
+    }
+
+    /// Tirer la barre de défilement de la liste ne retire pas le focus au champ : sans quoi
+    /// la liste se refermerait sous le pointeur.
+    #[test]
+    fn scrolling_the_list_keeps_it_open() {
+        let rendu = selecteur_rendu();
+
+        let liste = rendu
+            .split("<ul")
+            .nth(1)
+            .and_then(|suite| suite.split('>').next())
+            .expect("la liste est rendue");
+        assert!(liste.contains("@mousedown.prevent"), "{liste}");
+    }
+
+    /// Après un choix, le focus reste dans le champ : un clic rouvre la liste, que le
+    /// `focus` ne rouvrirait pas.
+    #[test]
+    fn a_click_reopens_the_list_after_a_choice() {
+        let rendu = selecteur_rendu();
+
+        let champ = rendu
+            .split("<Input")
+            .nth(1)
+            .and_then(|suite| suite.split("/>").next())
+            .expect("le champ est rendu");
+        assert!(champ.contains("@click=\"rouvrir\""), "{champ}");
+        let rouvrir = corps(&rendu, "function rouvrir(): void {");
+        assert!(rouvrir.contains("if (!ouvert.value) {"), "{rouvrir}");
+        assert!(rouvrir.contains("ouvrir()"), "{rouvrir}");
+    }
+
     /// Sans colonne libellé, la recherche n'a rien où chercher le motif : le paramètre
     /// reste, mais nommé pour que `noUnusedParameters` ne l'arrête pas.
     #[test]

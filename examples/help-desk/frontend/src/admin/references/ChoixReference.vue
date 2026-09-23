@@ -49,6 +49,9 @@ const resultats = ref<Entree[]>([])
 const actif = ref(-1)
 const faute = ref<string | null>(null)
 let minuterie: ReturnType<typeof setTimeout> | undefined
+// L'ouverture et la frappe lancent chacune une recherche, et leurs réponses peuvent
+// arriver dans le désordre : seule s'applique celle de la dernière lancée.
+let sequence = 0
 
 // Le formulaire se rouvre sur une autre ligne, ou le libellé arrive après lui : le repos suit.
 watch(
@@ -62,10 +65,18 @@ watch(
 )
 
 async function chercher(motif: string): Promise<void> {
+  const numero = ++sequence
   try {
-    resultats.value = await props.chercher(motif)
+    const trouves = await props.chercher(motif)
+    if (numero !== sequence) {
+      return
+    }
+    resultats.value = trouves
     faute.value = null
   } catch (cause) {
+    if (numero !== sequence) {
+      return
+    }
     resultats.value = []
     faute.value = refusee(cause) ? TEXTES.reserve : TEXTES.indisponible
   }
@@ -75,6 +86,13 @@ async function chercher(motif: string): Promise<void> {
 function ouvrir(): void {
   ouvert.value = true
   void chercher('')
+}
+
+// Après un choix, le focus reste dans le champ, et `focus` ne se redéclenche pas.
+function rouvrir(): void {
+  if (!ouvert.value) {
+    ouvrir()
+  }
 }
 
 function taper(valeur: string | number): void {
@@ -118,7 +136,8 @@ function clavier(evenement: KeyboardEvent): void {
 
 <!--
   Un champ qui cherche, et une liste sous lui. `mousedown.prevent` et non `click` : le clic
-  arriverait après la perte du focus, qui a déjà refermé la liste.
+  arriverait après la perte du focus, qui a déjà refermé la liste. Posé aussi sur la liste
+  elle-même, il garde le focus au champ quand on en tire la barre de défilement.
 -->
 <template>
   <div class="relative">
@@ -132,6 +151,7 @@ function clavier(evenement: KeyboardEvent): void {
       :model-value="saisie"
       @update:model-value="taper"
       @focus="ouvrir"
+      @click="rouvrir"
       @blur="fermer"
       @keydown="clavier"
     />
@@ -140,6 +160,7 @@ function clavier(evenement: KeyboardEvent): void {
       :id="`${id}-liste`"
       role="listbox"
       class="absolute z-50 mt-1 max-h-64 w-full overflow-auto border border-border bg-background shadow-md"
+      @mousedown.prevent
     >
       <li
         v-if="optionnel"
