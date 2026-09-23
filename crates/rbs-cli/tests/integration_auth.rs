@@ -550,6 +550,12 @@ fn the_auth_tests_of_the_generated_project_pass() {
         "auth::tests::tokens::an_emission_purges_the_expired_tokens_of_every_account",
         "auth::tests::account::a_taken_address_returns_the_same_202_and_changes_nothing",
         "auth::tests::account::the_route_writes_nothing_but_the_address",
+        // Nommés et non comptés : un module `users` qui ne se déclarerait pas passerait
+        // sinon en silence, `auth::tests::` matchant déjà les autres.
+        "auth::tests::users::listing_accounts_without_a_token_returns_401",
+        "auth::tests::users::a_user_listing_accounts_gets_403",
+        "auth::tests::users::an_admin_resolves_accounts_by_their_ids_and_reads_only_id_and_email",
+        "auth::tests::users::an_admin_searches_accounts_by_email",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),

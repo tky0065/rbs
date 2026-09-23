@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use rbs_core::{Comparison, Sort, TextMatch};
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -125,4 +126,24 @@ pub struct SessionResponse {
     pub created_at: DateTimeWithTimeZone,
     #[schema(value_type = String, format = DateTime)]
     pub expires_at: DateTimeWithTimeZone,
+}
+
+/// Ce que `POST /users/filter` rend d'un compte : de quoi le choisir et le nommer, rien de
+/// plus — ni le rôle ni les dates ne servent à une liste de sélection.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UserSummary {
+    pub id: Uuid,
+    pub email: String,
+}
+
+/// Les conditions de `POST /users/filter`, écrites comme celles d'un filtre engendré.
+#[derive(Debug, Default, Deserialize, ToSchema)]
+pub struct UserFilter {
+    #[schema(value_type = Option<rbs_core::UuidComparisonSchema>)]
+    pub id: Option<Comparison<Uuid>>,
+    #[schema(value_type = Option<rbs_core::TextMatchSchema>)]
+    pub email: Option<TextMatch>,
+    /// Colonnes de tri, préfixées de `-` pour l'ordre décroissant : `email`, `created_at`.
+    #[schema(value_type = Option<Vec<String>>)]
+    pub sort: Option<Sort>,
 }

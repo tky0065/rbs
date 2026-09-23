@@ -122,4 +122,5 @@ pub fn routes() -> Router<AppState> {
             get(controller::list_sessions).delete(controller::revoke_sessions),
         )
         .route("/auth/sessions/{id}", delete(controller::revoke_session))
+        .route("/users/filter", post(controller::account::filter_users))
 }

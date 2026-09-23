@@ -175,6 +175,10 @@ source      = "tests/tokens.rs.jinja"
 destination = "src/auth/tests/tokens.rs"
 
 [[files]]
+source      = "tests/users.rs.jinja"
+destination = "src/auth/tests/users.rs"
+
+[[files]]
 source      = "tests/verification.rs.jinja"
 destination = "src/auth/tests/verification.rs"
 
@@ -204,6 +208,7 @@ crate::auth::controller::verification::resend_verification,
 crate::auth::controller::list_sessions,
 crate::auth::controller::revoke_session,
 crate::auth::controller::revoke_sessions,
+crate::auth::controller::account::filter_users,
 """
 
 [[anchors]]
