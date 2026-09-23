@@ -214,6 +214,12 @@ que la table est vide, le critère de la v1.1 reste non éprouvé.
 
 | Date | rbs | Agent | Verdict |
 |---|---|---|---|
+| 2026-09-23 | 1.8.1 (dépôt, 32 commits après la 1.8.1 publiée) | Claude Code 2.1.280 | ok — les quatre constats, 124 tests verts, ignorés compris |
+
+Ce que la passe a montré au-delà du verdict : l'agent a écrit à la main les tests de
+`src/comments/tests/`, le CLI n'engendrant pas de test de création quand la référence à
+un article est obligatoire. Le contrôle `agents` ne l'a pas vu — il ne signale qu'un
+module de `src/` que le manifeste ne déclare pas.
 
 ### v1.10 — Adoption
 
@@ -267,5 +273,5 @@ liste à laquelle on ne peut plus se fier.
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
 | v1.7 Frontend | ✅ livré — publiée le 2026-09-20 |
 | v1.8 Le projet engendré s'ouvre | ✅ livré — publiée le 2026-09-20, corrigée par la 1.8.1 le 2026-09-20 |
-| v1.9 Solidité | 🚧 en cours — reste la passe du scénario d'agent, à lancer à la main |
+| v1.9 Solidité | ✅ livré — critère de sortie tenu, la passe du scénario d'agent consignée le 2026-09-23 |
 | v1.10 Adoption | 🚧 en cours — l'enregistrement et la page « rbs et Loco » sont en place ; l'enregistrement reste à régénérer par la version publiée, et l'annonce à faire |
