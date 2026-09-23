@@ -18,8 +18,12 @@ struct Exemple {
     database_url: &'static str,
     /// Features installées par `rbs add`, dans l'ordre, avant le CRUD.
     features: &'static [&'static str],
-    crud: &'static str,
-    champs: &'static str,
+    /// Les tables de `rbs generate crud`, dans l'ordre : son nom, puis ses `--fields`.
+    ///
+    /// Une seule partout sauf dans `help-desk`, dont la seconde table référence la
+    /// première : l'ordre est celui des clés étrangères. `role` et `with_upload`
+    /// s'appliquent à chacune.
+    cruds: &'static [(&'static str, &'static str)],
     /// `--role` sur `generate crud` : le rôle qu'exigent les écritures.
     ///
     /// Seul `blog-auth` le porte — c'est le seul exemple sous `auth`, et l'option refuse
@@ -49,8 +53,7 @@ const EXEMPLES: &[Exemple] = &[
         nom: "hello-crud",
         database_url: "postgres://rbs:rbs@localhost:5432/hello_crud",
         features: &[],
-        crud: "articles",
-        champs: "title:string,body:text,published:bool",
+        cruds: &[("articles", "title:string,body:text,published:bool")],
         role: None,
         with_upload: false,
         edite_a_la_main: &[],
@@ -64,8 +67,7 @@ const EXEMPLES: &[Exemple] = &[
         // cet exemple est la protection, pas la ressource. Le nom rend en prime l'ancre
         // `features` triée — elle empile les `mod` dans l'ordre d'installation, et
         // `mod auth; mod articles;` ferait broncher un `cargo fmt` dans le projet.
-        crud: "posts",
-        champs: "title:string,body:text,published:bool",
+        cruds: &[("posts", "title:string,body:text,published:bool")],
         // Les lectures restent au seuil que `generate crud` pose seul, les écritures
         // montent : l'exemple porte les deux régimes, et sa promesse — seul un admin
         // écrit — n'a plus à être tenue à la main.
@@ -84,10 +86,12 @@ const EXEMPLES: &[Exemple] = &[
         // `rbs add redis` inscrit `mod cache;`, non `mod redis;`, dans l'ancre
         // `modules` — distincte de `features`, qui ne porte plus que `uploads`.
         features: &["redis", "mail", "storage"],
-        crud: "uploads",
         // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
         // sans qu'on l'écrive, et le courriel a un destinataire qui vient du modèle.
-        champs: "title:string,owner_email:string,content_type:string,size:int",
+        cruds: &[(
+            "uploads",
+            "title:string,owner_email:string,content_type:string,size:int",
+        )],
         role: None,
         // Les trois routes de contenu binaire, sans quoi elles resteraient écrites à la
         // main alors que c'est précisément ce que ce drapeau produit.
@@ -116,10 +120,12 @@ const EXEMPLES: &[Exemple] = &[
         // de l'ordre d'arrivée des `add` : `jobs`, `mail`, `observability` y figurent
         // alphabétiquement quel que soit l'ordre choisi ici.
         features: &["jobs", "mail", "observability"],
-        crud: "subscribers",
         // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
         // le nom exact autant que sur le suffixe `_email`.
-        champs: "email:string:unique,name:string,confirmed:bool",
+        cruds: &[(
+            "subscribers",
+            "email:string:unique,name:string,confirmed:bool",
+        )],
         role: None,
         with_upload: false,
         // Ce que montre cet exemple et qu'aucun autre ne montre : un job enfilé dans la
@@ -159,8 +165,7 @@ const EXEMPLES: &[Exemple] = &[
             "ci",
             "api-keys",
         ],
-        crud: "orders",
-        champs: "reference:string,amount:int",
+        cruds: &[("orders", "reference:string,amount:int")],
         role: None,
         with_upload: false,
         // La création d'une commande trace et émet dans sa propre transaction : c'est ce
@@ -180,14 +185,16 @@ const EXEMPLES: &[Exemple] = &[
         // qu'il pose enveloppe celle de la limite de débit — c'est aussi ce qui rend le
         // serveur de développement de Vite joignable depuis son propre port.
         features: &["cors", "frontend-admin"],
-        crud: "incidents",
         // Huit colonnes, et huit contrôles à couvrir : une chaîne, un texte long, une
         // énumération, un booléen, un entier facultatif, une date facultative et un
         // instant. C'est le seul endroit du dépôt où le formulaire engendré est compilé
         // pour de bon, et une seule forme non couverte ici ne l'est nulle part.
-        champs: "reference:string:unique,sujet:string,detail:text,\
-                 gravite:enum(basse,moyenne,haute),ouvert:bool,duree_minutes:int:optional,\
-                 echeance:date:optional,constate_le:datetime",
+        cruds: &[(
+            "incidents",
+            "reference:string:unique,sujet:string,detail:text,\
+             gravite:enum(basse,moyenne,haute),ouvert:bool,duree_minutes:int:optional,\
+             echeance:date:optional,constate_le:datetime",
+        )],
         role: None,
         with_upload: false,
         edite_a_la_main: &[],
@@ -296,27 +303,22 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
             .success();
     }
 
-    let mut args = vec![
-        "generate",
-        "crud",
-        example.crud,
-        "--fields",
-        example.champs,
-        "--force",
-    ];
-    if let Some(role) = example.role {
-        args.extend(["--role", role]);
-    }
-    if example.with_upload {
-        args.push("--with-upload");
-    }
+    for &(crud, champs) in example.cruds {
+        let mut args = vec!["generate", "crud", crud, "--fields", champs, "--force"];
+        if let Some(role) = example.role {
+            args.extend(["--role", role]);
+        }
+        if example.with_upload {
+            args.push("--with-upload");
+        }
 
-    assert_cmd::Command::cargo_bin("rbs")
-        .expect("le binaire rbs doit être compilé")
-        .current_dir(&racine)
-        .args(args)
-        .assert()
-        .success();
+        assert_cmd::Command::cargo_bin("rbs")
+            .expect("le binaire rbs doit être compilé")
+            .current_dir(&racine)
+            .args(args)
+            .assert()
+            .success();
+    }
 
     racine
 }
