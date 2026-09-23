@@ -17,8 +17,8 @@ of it is marked "do not edit" — it is written to be edited.
 
 ## Status
 
-Version 0.4.0. The four milestones of the roadmap are delivered — the foundation,
-authentication, integrations, comfort. **rbs follows semantic versioning from 1.0 on**: the
+The [changelog](https://github.com/tky0065/rbs/blob/main/CHANGELOG.md) says what each
+release gives you. **rbs follows semantic versioning from 1.0 on**: the
 [compatibility page](./compatibility.md) says what the promise covers, and what it
 deliberately leaves out.
 

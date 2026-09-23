@@ -15,6 +15,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs dev --help" */}
 ```text
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
@@ -44,6 +45,7 @@ Without them, what it does depends entirely on what the project declares.
 `rbs dev` shows what it is about to do before doing it, like every command that touches an
 existing project:
 
+{/* rbs:transcript cmd="rbs dev --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
   base        127.0.0.1:1
   migrations  rbs migrate up
@@ -67,6 +69,7 @@ go to the server binary, and show on its line. The generated `main` reads none �
 comes from `[server] port` in `config/` — so they serve a `main` you have taught to read
 them:
 
+{/* rbs:transcript cmd="rbs dev --no-compose --no-migrate -- --verbose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs dev --no-compose --no-migrate -- --verbose
   base        127.0.0.1:1
@@ -75,6 +78,7 @@ $ rbs dev --no-compose --no-migrate -- --verbose
 
 A project with a compose — the default, for most — shows the extra step first:
 
+{/* rbs:libre raison="rbs dev lance alors docker compose up -d, que le rejeu ne peut pas exiger" */}
 ```text
   compose     docker-compose.yml
   base        localhost:15432
@@ -101,6 +105,7 @@ seconds to accept connections. A database that was meant to be up and is not wil
 come up on its own — and thirty seconds of silence to learn you forgot to start PostgreSQL
 are thirty seconds wasted.
 
+{/* rbs:transcript cmd="rbs dev --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée
 

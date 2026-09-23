@@ -16,6 +16,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs migrate --help" */}
 ```text
 $ rbs migrate --help
 Pilote les migrations du projet
@@ -37,6 +38,7 @@ Options :
 No subcommand takes a flag of its own, and neither `--template-dir` nor `--yes` is
 accepted: each is declared on the commands that read it.
 
+{/* rbs:transcript cmd="rbs migrate up --help" */}
 ```text
 $ rbs migrate up --help
 Applique les migrations en attente
@@ -50,6 +52,7 @@ Options :
 
 `down` and `status` are declared the same way. `new` alone takes an argument:
 
+{/* rbs:transcript cmd="rbs migrate new --help" */}
 ```text
 $ rbs migrate new --help
 Crée un fichier de migration vide
@@ -76,6 +79,7 @@ which means the `migration` crate is compiled on the first run.
 Applied migrations carry `✓`, pending ones `·`. On a project whose migration has never
 run:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   · m20260826_213608_create_articles   en attente
@@ -83,6 +87,7 @@ $ rbs migrate status
 
 ## `up`
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate up
 ✓ migrations appliquées
@@ -90,6 +95,7 @@ $ rbs migrate up
 
 And the same project, once up to date:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   ✓ m20260826_213608_create_articles   appliquée
@@ -100,6 +106,7 @@ $ rbs migrate status
 Creates an empty migration file, timestamped, and registers it in the `Migrator`. It
 touches neither cargo nor the database, so it works with nothing running:
 
+{/* rbs:transcript cmd="rbs migrate new add_tags_index" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" */}
 ```text
 $ rbs migrate new add_tags_index
 ✓ migration/src/m20260826_213622_add_tags_index.rs créée
@@ -111,6 +118,7 @@ Registration goes through two anchors of `migration/src/lib.rs`, kept apart beca
 forbids a non-inline `mod` inside a block, so the declaration cannot live in the
 `Migrator`'s `vec!`:
 
+{/* rbs:transcript cmd="cat migration/src/lib.rs" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate new add_tags_index" dans="demo" */}
 ```text
 $ cat migration/src/lib.rs
 pub use sea_orm_migration::prelude::*;
@@ -137,6 +145,7 @@ impl MigratorTrait for Migrator {
 
 `status` now has one of each:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   ✓ m20260826_213608_create_articles   appliquée
@@ -146,6 +155,7 @@ $ rbs migrate status
 The new file's body is a `todo!()` carrying the instruction, so running `up` before
 describing the schema change says exactly that instead of applying an empty migration:
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate up
 
@@ -159,10 +169,16 @@ erreur : la crate migration a échoué (code 101)
 
 Rolls back the last applied migration — one, not all:
 
+{/* rbs:transcript cmd="rbs migrate down" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate down
 ✓ dernière migration annulée
+```
 
+Both migrations are pending again:
+
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate down" dans="demo" base="oui" */}
+```text
 $ rbs migrate status
   · m20260826_213608_create_articles   en attente
   · m20260826_213622_add_tags_index    en attente
@@ -174,6 +190,7 @@ Outside a project — the search walks up from the current directory looking for
 `Cargo.toml` that carries `[package.metadata.rbs]`, which is also what keeps a command run
 from `migration/src` from targeting the wrong root:
 
+{/* rbs:transcript cmd="rbs migrate status" */}
 ```text
 $ rbs migrate status
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici
@@ -181,6 +198,7 @@ erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package
 
 With a `.env` that does not say which database to target:
 
+{/* rbs:libre raison="exige de retirer à la main RBS_DATABASE__URL du .env" */}
 ```text
 $ rbs migrate status
 erreur : RBS_DATABASE__URL est absente du .env : rbs ne sait pas quelle base migrer
@@ -189,6 +207,7 @@ erreur : RBS_DATABASE__URL est absente du .env : rbs ne sait pas quelle base mig
 With nothing listening at the other end, the message comes from the migration binary,
 whose exit code rbs reports:
 
+{/* rbs:libre raison="compile la crate migration du projet pour n'essuyer qu'un délai de connexion : trop long pour la passe rapide du rejeu" */}
 ```text
 $ rbs migrate status
 Connection Error: pool timed out while waiting for an open connection

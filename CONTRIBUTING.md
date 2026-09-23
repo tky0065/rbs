@@ -62,6 +62,28 @@ cargo test --workspace -- --ignored        # 17 tests, several minutes, Docker r
 CI runs both, on every pull request. If you cannot run the ignored tests locally, say so
 in your pull request — do not silence them.
 
+## The agent scenario
+
+`AGENTS.md` promises that a coding agent, starting from a freshly generated project, builds
+a complete feature through the CLI. `scenarios/commentaires/` puts that promise to the
+test: a versioned task handed to Claude Code, run **by hand before every minor release**
+and never in CI — an agent is not a reproducible test, and every run costs.
+
+```bash
+scenarios/commentaires/preparer.sh /tmp/passe     # auth, frontend-admin, an articles resource
+scenarios/commentaires/lancer.sh /tmp/passe/blog  # claude -p "$(cat prompt.md)" in the project
+scenarios/commentaires/verdict.sh /tmp/passe/blog # non-zero exit if anything is missing
+```
+
+All three use the repository's `rbs` and `rbs-core`, never an installed one. The prompt
+names no `rbs` command on purpose: finding them through `AGENTS.md` is what is being
+tested. The verdict requires four things — an entity declared by the CLI, tied to the
+articles and carrying `status` `visible|masque`; `rbs doctor` exiting 0; no "written
+outside the CLI" warning; the project's tests green with `--include-ignored` against a
+PostgreSQL it starts itself, on a random port, and removes afterwards. It needs Docker and
+`jq`. A passing run is recorded in `ROADMAP.md`, with the rbs version, the agent version
+and the date.
+
 ## Conventions
 
 **Commits follow [Conventional Commits](https://www.conventionalcommits.org), and nothing
@@ -89,9 +111,8 @@ Work on a dedicated branch, never on `main`.
   `{/* rbs:transcript cmd="…" */}`, it is replayed by `integration_docs` and compared to
   what the command really prints. A block that cannot be replayed declares itself free,
   with its reason — `{/* rbs:libre raison="…" */}` on the site, `<!-- rbs:libre raison="…" -->`
-  in a README. A bare block fails the tests: the exemption list in
-  `crates/rbs-cli/tests/transcriptions-exemptees.txt` only covers blocks older than the
-  guard, and never takes a new one.
+  in a README. A bare block fails the tests, which name its `file:line`; there is no
+  exemption list.
 
 **Architecture:** features depend in one direction only —
 `controller → service → repository → model`. A service never touches

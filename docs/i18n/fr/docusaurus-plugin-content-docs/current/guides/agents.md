@@ -25,6 +25,7 @@ ajoutez vos propres consignes sous l'import, aucune commande ne les réécrira.
 Seules deux parties d'`AGENTS.md` appartiennent à rbs, chacune délimitée par un
 commentaire HTML :
 
+{/* rbs:libre raison="schéma des deux zones d'AGENTS.md, leur contenu élidé" */}
 ```text
 # <projet> — mode d'emploi pour agents
 
@@ -56,12 +57,14 @@ vous ajoutez de votre côté. C'est la même règle que pour le code que rbs eng
 fichier est fait pour être modifié, et les marqueurs sont la seule promesse que rbs fait
 sur ce qu'il touchera.
 
-Les zones d'un vrai projet, engendré en français, se lisent ainsi :
+Les zones d'un vrai projet, engendré en français, se lisent ainsi — le mode d'emploi réduit à
+ses titres :
 
+{/* rbs:transcript cmd="git show :AGENTS.md" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add AGENTS.md" dans="blog" extrait="oui" */}
 ```text
 # blog — mode d'emploi pour agents
 
-<!-- rbs:guide 1.2.0 -->
+<!-- rbs:guide 1.8.1 -->
 ## Le CLI d'abord
 ## Ce fichier
 ## Les commandes
@@ -73,10 +76,10 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 <!-- /rbs:guide -->
 
 <!-- rbs:inventory -->
-- rbs 1.2.0 · base postgres
+- rbs 1.8.1 · base postgres
 - Fragments installés : aucun
 - Entités engendrées : aucune
-- Ancres du projet : features (src/lib.rs), routes (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
+- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), ignore (.gitignore), make (Makefile), health_probes (src/health/controller.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet
@@ -148,13 +151,13 @@ Un avertissement ne change ni le code de sortie ni le verdict final : un projet 
 porte qu'un avertissement continue de sortir en 0 et d'être rapporté comme sain dans
 l'ensemble — seul un échec véritable change cela.
 
-La sortie ci-dessous a été capturée sur un projet engendré en 1.2.0 : les douze ancres, les
-sept variables et la ligne des versions sont celles de ce projet-là. Ce qu'elle illustre —
-l'avertissement et la ligne qui en donne le remède — n'a pas changé.
+La sortie ci-dessous vient d'un projet tout juste créé, auquel on a ajouté à la main un
+répertoire `src/webhooks/`.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && mkdir src/webhooks" dans="demo" base="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 12 points d'insertion sont en place
+  ✓ ancres        les 14 points d'insertion sont en place
   ! agents        écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations     les modèles portent leurs ancres de relation
@@ -172,6 +175,7 @@ $ rbs doctor
 Supprimer un marqueur est traité comme la suppression d'une ancre de code : la commande
 qui aurait dû y écrire n'écrit rien, et affiche à la place le bloc exact à coller.
 
+{/* rbs:libre raison="le décor exige de retirer à la main la zone rbs:inventory d'AGENTS.md, ce que le rejeu ne sait pas faire ; sortie relevée à la main, le plan élidé par […]" */}
 ```text
 $ rbs add redis
 […]
@@ -191,17 +195,22 @@ sans même le mentionner. La seule commande qui le repose est
 [`rbs upgrade`](../cli/upgrade.md), puisque remettre le projet en accord avec le CLI
 courant est précisément son rôle :
 
+{/* rbs:transcript cmd="rbs upgrade" setup="rbs new blog2 --yes --lang en --database-url postgres://rbs:secret@localhost:5432/blog2 && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && git rm -q AGENTS.md && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m agents" dans="blog2" */}
 ```text
 $ rbs upgrade
-rbs 1.2.0 → 1.2.0
+rbs 1.8.1 → 1.8.1
 
-plan pour /private/tmp/rbs-demo/blog2
+plan pour …/blog2
 
   · Cargo.toml   inchangé
   + AGENTS.md    créé
 
   1 à créer, 1 inchangé
-✓ manifeste aligné sur rbs 1.2.0
+✓ manifeste aligné sur rbs 1.8.1
+
+  aucune note de migration pour rbs 1.8.1 → 1.8.1
+
+  cargo update -p rbs-core, puis cargo test
 ```
 
 ## Lire un plan en JSON
@@ -211,7 +220,7 @@ décompte en bas. `rbs add`, `rbs remove`, `rbs generate crud`, `feature`, `clie
 `job`, et `rbs upgrade` prennent `--json`, et la sortie standard porte alors
 un seul document JSON à la place — le plan, ou l'erreur. C'est lui qu'un agent doit lire.
 
-```text
+```bash
 rbs add cors --dry-run --json
 ```
 

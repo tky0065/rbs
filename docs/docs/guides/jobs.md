@@ -5,7 +5,7 @@ title: Jobs
 
 # Background jobs
 
-`rbs add jobs` installs a work queue into an existing project: thirteen files under
+`rbs add jobs` installs a work queue into an existing project: files under
 `src/modules/jobs/`, a migration for the `jobs` table, and a worker started with the server. Like
 the other bricks, it mounts no route — when work leaves the request cycle is a decision
 only your domain can make.
@@ -17,11 +17,12 @@ documentation.
 
 ## What gets installed
 
+{/* rbs:transcript cmd="rbs add jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ rbs add jobs
 jobs : jobs en arrière-plan : une table, un enfilage transactionnel, un worker qui réessaie
 
-plan pour /private/tmp/rbs-demo/demo
+plan pour …/demo
 
   + src/modules/jobs/mod.rs                         créé
   + src/modules/jobs/config.rs                      créé
@@ -36,7 +37,7 @@ plan pour /private/tmp/rbs-demo/demo
   + src/modules/jobs/tests/reservation.rs           créé
   + src/modules/jobs/tests/retry.rs                 créé
   + src/modules/jobs/tests/worker.rs                créé
-  + migration/src/m20260830_111505_create_jobs.rs   créé
+  + migration/src/m20260922_082422_create_jobs.rs   créé
   ~ migration/src/lib.rs                            modifié
   + src/modules/mod.rs                              créé
   ~ src/lib.rs                                      modifié

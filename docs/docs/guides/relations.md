@@ -11,7 +11,7 @@ writing, by hand, the exact part SeaORM makes the most tedious: the `Relation` v
 type of [`--fields`](../cli/generate.md#the-eleven-types), `references`, closes that gap —
 entirely from the command line, with no database running.
 
-```text
+```bash
 rbs g crud posts --fields "title:string, author:references:users"
 ```
 
@@ -59,18 +59,20 @@ its own directory — in a project with `auth`, `users` sits inside `src/auth/mo
 `crate::auth::model::user::Entity` for a field that only ever wrote `users`. A target absent
 from that inventory is refused, by name, next to the ones the CLI does know:
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:writers --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g crud posts --fields title:string,author:references:users" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
+$ rbs g crud comments --fields body:text,author:references:writers --dry-run
 erreur : relation « author » — « writers » est introuvable dans ce projet
-        → entités connues : comments, posts, refresh_tokens, users
+        → entités connues : comments, one_time_tokens, posts, refresh_tokens, users
 ```
 
 A target the inventory does know, but whose table no migration creates yet, is refused on the
 same principle — a foreign key pointed at it would fail the moment migrations run, far from
 the command that wrote it:
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,draft:references:drafts --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g feature drafts" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
+$ rbs g crud comments --fields body:text,draft:references:drafts --dry-run
 erreur : relation « draft » — « drafts » n'a pas de migration dans ce projet
         → une clé étrangère la viserait avant qu'aucune migration ne crée sa table : écrivez sa migration avec `rbs migrate new`
 ```
@@ -81,6 +83,7 @@ A bare reference is many-to-one: any number of posts can name the same author. `
 no extra grammar to turn it one-to-one — it is a `belongs_to` whose column happens to be
 unique, which is exactly what a one-to-one relation is in a relational database:
 
+{/* rbs:libre raison="fragment de la grammaire de --fields, non une sortie" */}
 ```text
 owner:references:users:unique:cascade
 ```
@@ -114,8 +117,9 @@ already indexes the column by being a constraint, which is why `profiles` gets n
 refusal a plain `unique:index` gets on an ordinary column, and the reason a reference never
 takes `index` explicitly at all:
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:index --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
+$ rbs g crud comments --fields body:text,author:references:users:index --dry-run
 erreur : champ 2 « author » — « index » redondant : une clé étrangère est déjà indexée
         → retirez « index »
 ```
@@ -126,12 +130,16 @@ a `NOT NULL` column is refused rather than silently requiring `optional` for you
 nullability is not something this grammar infers from a policy chosen three words later — and
 asking for both policies at once is refused as the contradiction it is:
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:nullify --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
+$ rbs g crud comments --fields body:text,author:references:users:nullify --dry-run
 erreur : champ 2 « author » — « nullify » sur une colonne non nullable
         → ajoutez « optional », ou choisissez « cascade »
+```
 
-$ rbs g crud comments --fields "body:text, author:references:users:optional:cascade:nullify" --dry-run
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:optional:cascade:nullify --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
+```text
+$ rbs g crud comments --fields body:text,author:references:users:optional:cascade:nullify --dry-run
 erreur : champ 2 « author » — « cascade » et « nullify » se contredisent
         → gardez l'un des deux
 ```
@@ -177,6 +185,7 @@ child that does not actually carry the expected key — the second check exists 
 variant it writes is one SeaORM would accept, rather than one that fails to compile forty
 seconds later:
 
+{/* rbs:transcript cmd="rbs g crud users --has-many categories --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g crud categories --fields name:string" dans="blog" */}
 ```text
 $ rbs g crud users --has-many categories --dry-run
 erreur : categories ne porte aucune colonne référençant `users` : ajoutez-la avant de relancer `--has-many categories`
@@ -210,10 +219,11 @@ shortcut that a single ambiguous trait cannot provide.
 without asking anything of the database. A required reference breaks that: the seed would need
 a real `author_id` from `users`, and has no row to point at that it can defend as correct. Owed
 its own explanation rather than a silent omission, so the command says exactly why it skipped
-it:
+it — and why the tests it writes stop at the cases that create nothing:
 
+{/* rbs:transcript cmd="rbs g crud posts --fields title:string,author:references:users" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" extrait="oui" */}
 ```text
-aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
+  la référence « author » est requise : ni le seed de posts ni ses scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien
 ```
 
 Making the reference `optional` sidesteps the problem outright — an unseeded `posts` seeds

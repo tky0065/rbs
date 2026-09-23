@@ -35,7 +35,7 @@ exists so that editing it is enough.
 
 ### What the core carries
 
-Eleven public modules, all of them on the "nobody wants to read this" side of the test:
+Its main public modules, all of them on the "nobody wants to read this" side of the test:
 
 | Module | What it does | Why it never varies |
 |---|---|---|
@@ -86,6 +86,7 @@ Everything on the generated side of the boundary is organised by feature, never 
 one directory per resource, six files inside it. `rbs generate crud articles` writes them
 all.
 
+{/* rbs:libre raison="arborescence commentée, non la sortie d'une commande" */}
 ```text
 src/articles/
 ├── mod.rs          declares the siblings, exposes the routes
@@ -173,6 +174,7 @@ rejected a malformed or invalid body before this function runs.
 
 The six files are ordered, and the arrows all point the same way:
 
+{/* rbs:libre raison="schéma des dépendances entre couches, non une sortie" */}
 ```text
 controller ──> service ──> repository ──> model
      │            │                          ▲
@@ -201,6 +203,7 @@ which files know SeaORM at all:
 grep -l sea_orm examples/hello-crud/src/articles/*.rs
 ```
 
+{/* rbs:libre raison="grep lancé à la racine du dépôt sur examples/, que le rejeu, joué dans un répertoire temporaire, ne voit pas" */}
 ```text
 examples/hello-crud/src/articles/controller.rs
 examples/hello-crud/src/articles/dto.rs
@@ -222,6 +225,7 @@ is the honest one:
 grep -l 'Entity::' examples/hello-crud/src/articles/*.rs
 ```
 
+{/* rbs:libre raison="grep lancé à la racine du dépôt sur examples/, que le rejeu, joué dans un répertoire temporaire, ne voit pas" */}
 ```text
 examples/hello-crud/src/articles/repository.rs
 ```

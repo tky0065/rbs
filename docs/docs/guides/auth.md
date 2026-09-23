@@ -6,8 +6,9 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-thirty-five files under `src/auth/`, three mail templates, one seed, one migration, and
-fifteen routes — on thirteen paths — mounted on the router. What it lays down is ordinary
+its files under `src/auth/`, three mail templates, one seed, one migration, and the routes
+[below](#what-gets-installed), mounted on the router. The `mail` and `rate-limit` features
+it requires come with it when the project lacks them. What it lays down is ordinary
 code in your source tree — an entity, a service, a controller, a guard — and it is meant to
 be read and changed.
 
@@ -18,12 +19,32 @@ documentation.
 
 ## What gets installed
 
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new blog --yes --lang en --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
+auth exige mail, rate-limit : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ src/lib.rs                                             modifié
+  ~ src/state.rs                                           modifié
+  ~ docker-compose.yml                                     modifié
+  ~ Cargo.toml                                             modifié
+  ~ config/default.toml                                    modifié
+  ~ .env.example                                           modifié
+  + src/modules/rate_limit/mod.rs                          créé
+  + src/modules/rate_limit/config.rs                       créé
+  + src/modules/rate_limit/counter.rs                      créé
+  + src/modules/rate_limit/tests.rs                        créé
+  ~ src/router.rs                                          modifié
   + src/auth/mod.rs                                        créé
   + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
@@ -63,24 +84,20 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
-  + migration/src/m20260910_162209_create_auth_tables.rs   créé
+  + migration/src/m20260922_082422_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/lib.rs                                             modifié
-  ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
   ~ src/seeds/main.rs                                      modifié
-  ~ src/state.rs                                           modifié
-  ~ Cargo.toml                                             modifié
-  ~ config/default.toml                                    modifié
   ~ config/development.toml                                modifié
-  ~ .env.example                                           modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  40 à créer, 12 à modifier
-✓ auth installée — 40 créés, 12 modifiés
+  51 à créer, 13 à modifier
+✓ auth installée — 51 créés, 13 modifiés
 
   rbs migrate up
+
+  rbs seed writes the admin account into the users table: ADMIN_EMAIL (admin@blog.test) and ADMIN_PASSWORD, drawn into your .env, are the credentials the sign-in screen asks for
 ```
 
 Fifteen routes come with it, on thirteen paths — `/auth/sessions` carries both the listing

@@ -5,7 +5,7 @@ title: Recevoir un fichier
 
 # Recevoir un fichier
 
-C'est le quatrième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+C'est le quatrième tutoriel. Il reprend `demo` ; cette page n'a besoin de rien
 au-delà de [Préparer le terrain](./setup.md). Le cas : un client dépose un justificatif —
 un reçu, un papier à garder — et à la fin de cette page, `PUT /uploads/{id}/content` le
 range et répond `204`.
@@ -21,7 +21,7 @@ d'exécution avec sa base, et `curl` de nouveau.
 rbs add storage
 ```
 
-{/* rbs:transcript cmd="rbs add storage" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add storage" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add storage
 storage : stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3
@@ -67,6 +67,7 @@ git add -A && git commit -q -m "storage installée"
 rbs generate crud uploads --fields "title:string,owner_email:string,content_type:string,size:int" --with-upload
 ```
 
+{/* rbs:transcript cmd="rbs generate crud uploads --fields title:string,owner_email:string,content_type:string,size:int --with-upload" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs add storage" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -83,7 +84,7 @@ plan pour …/demo
   + src/uploads/tests/filter.rs                        créé
   + src/uploads/tests/content.rs                       créé
   + src/seeds/uploads.rs                               créé
-  + migration/src/m20260909_094423_create_uploads.rs   créé
+  + migration/src/m20260922_082427_create_uploads.rs   créé
   ~ src/lib.rs                                         modifié
   ~ src/router.rs                                      modifié
   ~ src/openapi.rs                                     modifié
@@ -95,7 +96,7 @@ plan pour …/demo
   14 à créer, 7 à modifier
 ✓ uploads générée — 14 créés, 7 modifiés
 
-  la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
+  la migration m20260922_082427_create_uploads reste à appliquer avant de lancer le projet
 ```
 
 Deux choses méritent d'être nommées ici. `--with-upload` est ce qui a écrit les trois
@@ -112,6 +113,7 @@ que son nom finit par `_email` ; rien dans la commande ne le demandait.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add storage && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud uploads --fields title:string,owner_email:string,content_type:string,size:int --with-upload" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.44s
@@ -127,6 +129,7 @@ serveur ci-dessous de démarrer contre elle.
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -145,6 +148,7 @@ curl -i -X POST http://127.0.0.1:8080/uploads \
   -d '{"title":"Justificatif de domicile","owner_email":"pas-un-email","content_type":"application/pdf","size":48213}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 422 Unprocessable Entity
 content-type: application/problem+json
@@ -172,6 +176,7 @@ La ligne existe ; son contenu, pas encore :
 curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 404 Not Found
 content-type: application/problem+json
@@ -190,6 +195,7 @@ curl -i -X PUT http://127.0.0.1:8080/uploads/$ID/content \
   --data-binary 'Justificatif de domicile, PDF simulé pour la démo du tutoriel.'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 x-request-id: 01M22SFC29MWP1REHVJBA2B7F3
@@ -203,6 +209,7 @@ plus tôt répond maintenant sans corps :
 curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 x-request-id: 01M22SFC2PJTX8YFDNPH9QYJY8
@@ -219,6 +226,7 @@ depuis l'en-tête seul, sans jamais récupérer de corps. Et en le relisant :
 curl -i http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/octet-stream
@@ -276,7 +284,7 @@ qu'aucune ressource ne réclame — et `exists` répond à la requête `HEAD` pl
 - [Storage](../guides/storage.md) couvre les deux backends, la règle d'échappement des
   clés que cette page n'a jamais déclenchée, et tout ce qu'`--with-upload` vous laisse
   faire — les limites de taille, le filtrage MIME, le listage.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que ce projet pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que ce projet pourrait
   encore installer.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète d'`--with-upload`, y
   compris comment il se combine avec `--role` et `--soft-delete`.

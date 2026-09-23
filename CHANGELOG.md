@@ -14,12 +14,39 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs new` without `--yes` no longer hangs in a Windows script.** With no terminal to
+  ask in, it waited forever for a key on the console. It now refuses at once, as it already
+  did elsewhere, and says to pass `--yes` or the answers as flags. On every platform, a
+  `rbs new` whose standard input is redirected no longer asks either, even with a terminal
+  at hand.
+
+- **`rbs new --core-path` writes a plain path on Windows.** The manifest carried the
+  `\\?\D:\…` form that `canonicalize` returns there; it now reads `D:\…`, as one would
+  type it. A UNC path keeps its form.
+
 - **`make help` no longer prints `â€”` on Windows.** The banner of a generated `Makefile`
   carried an em dash inside the recipe itself, where its three bytes arrived read one by
   one; the descriptions of the shortcuts, which `awk` reads from the file, never were. The
   banner now uses an ASCII hyphen, and no recipe carries anything but ASCII. A project generated
   before keeps its `Makefile`, which belongs to its author: replace `—` by `-` on the
   `help` line to get the fix.
+- **`rbs generate --help` no longer counts the files of an empty feature.** The help of
+  `generate feature` announced six when the command has written seven since `filter.rs`;
+  it now says what an empty feature lacks — its fields and its migration — rather than a
+  number the next layer would contradict.
+- **Two migrations created within the same second no longer run in random order.** Their
+  names carried the same timestamp, so `migrations()` sorted them by table name rather than
+  by creation — a foreign key could run before the table it references. `rbs generate crud`,
+  `rbs generate migration`, `rbs migrate new` and `rbs add` now date a new migration one
+  second after the latest one in `migration/src/` whenever the clock has not moved past it.
+
+- **`rbs doctor` no longer fails a project fresh from `rbs new --with mail`.** The `.env`
+  check required every key of `.env.example` in `.env`, including `RBS_MAIL__SMTP_PASSWORD`,
+  which the `mail` fragment — and `auth`, which installs it — declares empty in the example
+  alone. A key `.env.example` leaves empty (`KEY=`, `KEY=""`, or `KEY=` followed by a
+  comment) may now be missing: the check names it and counts it apart, without failing, and
+  the `mail` check reads the missing password as an empty one. A key the example gives a
+  value is required as before.
 
 ## [1.8.1] — 2026-09-20
 

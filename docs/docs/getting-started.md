@@ -5,8 +5,8 @@ title: Getting started
 
 # Getting started
 
-This page goes from an empty directory to a CRUD API answering on `localhost:8080`,
-in eight commands. Every block of output below was copied from a real run — if what
+This page goes from an empty directory to a CRUD API answering on `localhost:8080`.
+Every block of output below was copied from a real run — if what
 your terminal prints matches, you have not drifted — timings, identifiers and dates
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
@@ -53,8 +53,9 @@ Either way, that drops an `rbs` executable in `~/.cargo/bin`, and a second copy 
 rbs --version
 ```
 
+{/* rbs:transcript cmd="rbs --version" */}
 ```text
-rbs 1.2.0
+rbs 1.8.1
 ```
 
 :::note
@@ -98,6 +99,7 @@ nothing else. Drop it and the CLI asks, in order, for the database URL if
 `--database-url` is missing and for the optional features to install. It also refuses to
 run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 
+{/* rbs:transcript cmd="rbs new demo" */}
 ```text
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
@@ -125,6 +127,7 @@ Twenty-three files, and none of them a black box:
 
 The `.env` the command wrote carries the URL you passed:
 
+{/* rbs:libre raison="contenu du .env qu'écrit rbs new, non la sortie d'une commande" */}
 ```text
 RBS_ENV=development
 RBS_DATABASE__URL=postgres://rbs:secret@localhost:5432/demo
@@ -182,6 +185,7 @@ volumes:
 docker compose up -d --wait
 ```
 
+{/* rbs:libre raison="sortie de docker compose, qui démarre un conteneur : hors de portée du rejeu" */}
 ```text
  Network demo_default  Creating
  Network demo_default  Created
@@ -213,6 +217,7 @@ rbs migrate up
 The first run compiles the `migration` crate, which takes a minute; the last lines are
 the ones that matter:
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.48s
@@ -280,6 +285,7 @@ rbs migrate up
 rbs migrate status
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.02s
@@ -287,6 +293,7 @@ rbs migrate status
 ✓ migrations appliquées
 ```
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool && rbs migrate up" dans="demo" base="oui" */}
 ```text
   ✓ m20260829_100554_create_articles   appliquée
 ```
@@ -315,6 +322,7 @@ cargo run
 The first build is long — it is the whole Axum, SeaORM and utoipa tree. When it is
 done:
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -330,6 +338,7 @@ Leave the server running and open a second terminal.
 curl -i http://127.0.0.1:8080/health
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
@@ -356,6 +365,7 @@ curl -i -X POST http://127.0.0.1:8080/articles \
   -d '{"title":"Premier article","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 201 Created
 content-type: application/json
@@ -373,6 +383,7 @@ The identifier and the timestamps are the server's — `id`, `created_at` and
 curl http://127.0.0.1:8080/articles
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 ```
@@ -383,6 +394,7 @@ move through them. The three remaining routes — `GET`, `PATCH` and `DELETE` on
 
 Meanwhile, the server's terminal has been printing one line per request:
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
 10:06:30  INFO   rbs_core::trace     request  status=201 latency_ms=4.517125 request_id=01M16FRBHQDCDV859ADGK8ZMJG method=POST path=/articles
@@ -424,9 +436,9 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Seven checks: the anchors are still in place — twelve of them here, eleven from the
-skeleton plus the compose's, which drops out of the count for a project with no
-`docker-compose.yml` (`modules`, `jobs`, `job_modules` and `schedules` drop out too, on a
+The checks: the anchors are still in place — the skeleton's plus the compose's, which
+drops out of the count for a project with no `docker-compose.yml`
+(`modules`, `jobs`, `job_modules` and `schedules` drop out too, on a
 project that never installed a fragment) — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still
 match what the project carries, no model has a relation without the two anchors it would
 need to receive one, `.env` holds every key `.env.example` declares, the project and

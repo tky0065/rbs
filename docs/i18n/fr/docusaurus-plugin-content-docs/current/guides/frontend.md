@@ -389,7 +389,7 @@ fois le build en place. `rbs generate crud` y inscrit lui-même la sienne, dans 
 `// <rbs:vite_proxy>` — `'/articles',` pour une table nommée `articles` — si bien qu'un écran
 engendré fonctionne sous `npm run dev` sans une ligne à ajouter ; une route que vous écrivez
 vous-même se déclare à côté, à la main. Le relais est aussi la raison pour laquelle
-l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une origine. [`rbs add cors`](../cli/add.md#les-seize-features) vise le cas où le client est
+l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une origine. [`rbs add cors`](../cli/add.md#les-features) vise le cas où le client est
 servi depuis une *autre* origine, et `admin-console` le porte pour que la configuration soit
 sous les yeux.
 

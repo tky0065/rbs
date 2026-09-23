@@ -5,7 +5,7 @@ title: Cache
 
 # Cache
 
-`rbs add redis` installe un cache Redis dans un projet existant : trois fichiers sous
+`rbs add redis` installe un cache Redis dans un projet existant : des fichiers sous
 `src/modules/cache/`, une section `[cache]` dans la configuration, et un champ sur votre
 `AppState`. Aucune route, aucun middleware — la feature est une brique, et ce que vous
 mettez en cache ne regarde que vous.
@@ -17,11 +17,12 @@ documentation.
 
 ## Ce qui est installé
 
+{/* rbs:transcript cmd="rbs add redis" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
 $ rbs add redis
 redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par serde
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/cache/mod.rs      créé
   + src/modules/cache/config.rs   créé

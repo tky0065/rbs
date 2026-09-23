@@ -5,7 +5,7 @@ title: Courriel
 
 # Courriel
 
-`rbs add mail` installe l'envoi par SMTP dans un projet existant : cinq fichiers sous
+`rbs add mail` installe l'envoi par SMTP dans un projet existant : des fichiers sous
 `src/modules/mail/`, un répertoire de gabarits, et un `Mailer` sur votre `AppState`. Comme les
 autres briques, elle ne monte aucune route — le moment où un message part est une décision
 que seul votre domaine peut prendre.
@@ -18,11 +18,12 @@ documentation.
 
 ## Ce qui est installé
 
+{/* rbs:transcript cmd="rbs add mail" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
 $ rbs add mail
 mail : envoi de courriels par SMTP : transport partagé, gabarits minijinja
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/mail/mod.rs         créé
   + src/modules/mail/config.rs      créé
@@ -64,15 +65,14 @@ Les défauts décrivent un serveur de développement : le port 1025 en clair, ce
 **Le mot de passe est la seule valeur qu'aucun fichier versionné ne porte.** `rbs add mail`
 écrit `RBS_MAIL__SMTP_PASSWORD=` dans `.env.example` et rien d'autre — `config/default.toml`
 est versionné, et un mot de passe qui y figure est un mot de passe à changer.
-[`rbs doctor`](../cli/doctor.md) nomme la ligne manquante une seule fois, dans son contrôle
-`.env`, et le contrôle `mail` la lui laisse :
+Parce que `.env.example` la déclare vide, [`rbs doctor`](../cli/doctor.md) n'exige pas la
+ligne dans `.env` : son contrôle `.env` nomme la clé sans échouer, et le contrôle `mail` lit
+un mot de passe absent comme un mot de passe vide :
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --lang fr --with mail --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
-  ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
-      ajoutez au .env :
-      RBS_MAIL__SMTP_PASSWORD=
-  …
-  ✓ mail          rien d'autre à signaler — RBS_MAIL__SMTP_PASSWORD relève du contrôle .env
+  ✓ .env          7 des 8 variables de .env.example sont renseignées ; RBS_MAIL__SMTP_PASSWORD, vide dans l'exemple, peut manquer
+  ✓ mail          le transport SMTP est configuré
 ```
 
 Ce que le contrôle `mail` diagnostique, c'est le couple, non la variable seule : un mot de
@@ -178,7 +178,7 @@ d'une ligne en base. Installer `jobs` est une décision, non un prérequis.
 
 ## Les tests
 
-Le `src/modules/mail/tests.rs` engendré n'a besoin d'aucun serveur pour six de ses sept tests : les
+Le `src/modules/mail/tests.rs` engendré n'a besoin d'aucun serveur pour la plupart de ses tests : les
 trois modes de chiffrement bâtissent chacun un transport, un expéditeur invalide est refusé
 en le nommant, un message bâti porte son expéditeur et son destinataire, un gabarit rend
 ses variables, et un gabarit absent nomme son fichier sans panique.

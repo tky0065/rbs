@@ -23,6 +23,7 @@ import, and no command will ever rewrite them.
 
 Only two parts of `AGENTS.md` belong to rbs, each delimited by an HTML comment:
 
+{/* rbs:libre raison="schéma des deux zones d'AGENTS.md, leur contenu élidé" */}
 ```text
 # <project> — agent handbook
 
@@ -53,12 +54,14 @@ title, not the `## Project notes` section `rbs new` leaves empty, not a heading 
 your own. The same rule already governs the code rbs generates: this file is meant to be
 edited, and the markers are the only promise rbs makes about what it will touch.
 
-A real project's zones, generated in English, read like this:
+A real project's zones, generated in English, read like this — the handbook cut down to its
+headings:
 
+{/* rbs:transcript cmd="git show :AGENTS.md" setup="rbs new blog --yes --lang en --database-url postgres://rbs:secret@localhost:5432/blog && git add AGENTS.md" dans="blog" extrait="oui" */}
 ```text
 # blog — agent handbook
 
-<!-- rbs:guide 1.2.0 -->
+<!-- rbs:guide 1.8.1 -->
 ## CLI first
 ## This file
 ## Commands
@@ -70,10 +73,10 @@ A real project's zones, generated in English, read like this:
 <!-- /rbs:guide -->
 
 <!-- rbs:inventory -->
-- rbs 1.2.0 · postgres database
+- rbs 1.8.1 · postgres database
 - Fragments installed: none
 - Generated entities: none
-- Project anchors: features (src/lib.rs), routes (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
+- Project anchors: features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), ignore (.gitignore), make (Makefile), health_probes (src/health/controller.rs)
 <!-- /rbs:inventory -->
 
 ## Project notes
@@ -145,13 +148,13 @@ A warning does not change the exit status or the final verdict: a project with n
 but a warning still exits 0 and is still reported as healthy overall — only an actual
 failure does that.
 
-The output below was captured on a project generated with rbs 1.2.0: the twelve anchors,
-the seven variables and the version line are that project's. What it illustrates — the
-warning and the line that states its remedy — has not changed.
+The output below comes from a freshly created project into which a `src/webhooks/`
+directory was added by hand.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && mkdir src/webhooks" dans="demo" base="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 12 points d'insertion sont en place
+  ✓ ancres        les 14 points d'insertion sont en place
   ! agents        écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations     les modèles portent leurs ancres de relation
@@ -170,6 +173,7 @@ Deleting a marker is treated the same way as deleting one of the code anchors: t
 command that would have written there writes nothing, and shows the exact block to paste
 back instead.
 
+{/* rbs:libre raison="le décor exige de retirer à la main la zone rbs:inventory d'AGENTS.md, ce que le rejeu ne sait pas faire ; sortie relevée à la main, le plan élidé par […]" */}
 ```text
 $ rbs add redis
 […]
@@ -188,17 +192,22 @@ Deleting the whole file goes further still: `rbs add` and `rbs generate` finish 
 even mentioning it. The only command that puts it back is [`rbs upgrade`](../cli/upgrade.md),
 because restoring the project to what the current CLI expects is precisely its job:
 
+{/* rbs:transcript cmd="rbs upgrade" setup="rbs new blog2 --yes --lang en --database-url postgres://rbs:secret@localhost:5432/blog2 && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && git rm -q AGENTS.md && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m agents" dans="blog2" */}
 ```text
 $ rbs upgrade
-rbs 1.2.0 → 1.2.0
+rbs 1.8.1 → 1.8.1
 
-plan pour /private/tmp/rbs-demo/blog2
+plan pour …/blog2
 
   · Cargo.toml   inchangé
   + AGENTS.md    créé
 
   1 à créer, 1 inchangé
-✓ manifeste aligné sur rbs 1.2.0
+✓ manifeste aligné sur rbs 1.8.1
+
+  aucune note de migration pour rbs 1.8.1 → 1.8.1
+
+  cargo update -p rbs-core, puis cargo test
 ```
 
 ## Reading a plan as JSON
@@ -208,7 +217,7 @@ at the bottom. `rbs add`, `rbs remove`, `rbs generate crud`, `feature`, `client`
 and `rbs upgrade` take `--json`, and standard output then carries a single JSON document
 instead — the plan, or the error. That is what an agent should read.
 
-```text
+```bash
 rbs add cors --dry-run --json
 ```
 

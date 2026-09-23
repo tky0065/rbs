@@ -5,14 +5,14 @@ title: Audit log
 
 # Audit log
 
-`rbs add audit` installs a write log into an existing project: four files under
+`rbs add audit` installs a write log into an existing project: files under
 `src/modules/audit/`, and a migration for the `audit_log` table. Like the other bricks, it mounts
 no route — and unlike them, it does not even wire itself into the ones you already have.
 Calling it is your service's job, and the reason is [below](#what-the-fragment-does-not-do).
 
 ## What gets installed
 
-{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add audit
 audit : journal des écritures : qui a modifié quoi, quand, dans la transaction du changement

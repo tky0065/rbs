@@ -5,7 +5,7 @@ title: Locking the API down
 
 # Locking the API down
 
-This is the third of nine tutorials. It picks up `demo` right after
+This is the third tutorial. It picks up `demo` right after
 [Your first resource](./first-resource.md) — running, with the `articles` CRUD from that
 page — and closes it to everyone it doesn't know. The case: a blog where every visitor
 may read a post, and only an administrator may write one. Rather than reopen `articles`,
@@ -24,7 +24,7 @@ three requests instead of two.
 rbs add auth
 ```
 
-{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
@@ -118,6 +118,7 @@ git add -A && git commit -q -m "auth installée"
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.74s
@@ -136,6 +137,7 @@ refresh tokens, and the one-time tokens behind the password and verification lin
 rbs generate crud posts --fields "title:string,body:text,published:bool" --role admin
 ```
 
+{/* rbs:transcript cmd="rbs generate crud posts --fields title:string,body:text,published:bool --role admin" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs add auth" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -152,7 +154,7 @@ plan pour …/demo
   + src/posts/tests/filter.rs                        créé
   + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
-  + migration/src/m20260909_093231_create_posts.rs   créé
+  + migration/src/m20260922_082425_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
@@ -164,7 +166,7 @@ plan pour …/demo
   14 à créer, 7 à modifier
 ✓ posts générée — 14 créés, 7 modifiés
 
-  la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
+  la migration m20260922_082425_create_posts reste à appliquer avant de lancer le projet
 ```
 
 Here is the point of this page: on a project carrying `auth`, `generate crud` closes
@@ -181,6 +183,7 @@ Drop `--role admin` from the command above and the plan would look the same, but
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs migrate up && rbs generate crud posts --fields title:string,body:text,published:bool --role admin" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.12s
@@ -195,6 +198,7 @@ Only the `posts` table was pending this time — the first `migrate up` already 
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -213,6 +217,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/register \
   -d '{"email":"alice@example.com","password":"un-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 202 Accepted
 content-length: 0
@@ -241,6 +246,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
   -d '{"token":"<le token du lien>"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 ```
@@ -265,6 +271,7 @@ curl -i -X POST http://127.0.0.1:8080/posts \
   -d '{"title":"Premier post","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 401 Unauthorized
 content-type: application/problem+json
@@ -286,6 +293,7 @@ curl -i -X POST http://127.0.0.1:8080/posts \
   -d '{"title":"Premier post","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 403 Forbidden
 content-type: application/problem+json
@@ -304,6 +312,7 @@ curl -i http://127.0.0.1:8080/posts \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
@@ -336,6 +345,7 @@ curl -s -X POST http://127.0.0.1:8080/auth/change-password \
   -d '{"current_password":"un-mot-de-passe-long","new_password":"un-second-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
 ```
@@ -352,6 +362,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/forgot-password \
   -d '{"email":"alice@example.com"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 202 Accepted
 content-length: 0
@@ -367,6 +378,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/reset-password \
   -d '{"token":"<le token du lien>","new_password":"un-troisieme-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 ```
@@ -408,9 +420,9 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 
 ## Going further
 
-- [Authentication](../guides/auth.md) covers the fifteen routes `add auth` mounts, the
+- [Authentication](../guides/auth.md) covers the routes `add auth` mounts, the
   token pair, and the `Role` enum this page only used at its default.
-- [`rbs add`](../cli/add.md) covers the ten other features this project could still
+- [`rbs add`](../cli/add.md) covers the other features this project could still
   install, and the `--force` this page never needed.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a

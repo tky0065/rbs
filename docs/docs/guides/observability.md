@@ -7,7 +7,7 @@ title: Observability
 
 Logs answer *what happened*. `rbs add observability` answers the two questions that come
 next: *which route is slow, since when* — from metrics — and *on which downstream call* —
-from traces. It installs four files under `src/modules/observability/`, an `[observability]`
+from traces. It installs files under `src/modules/observability/`, an `[observability]`
 config section, a counting middleware, and a second HTTP listener that serves `/metrics`.
 
 ```bash

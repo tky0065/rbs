@@ -5,7 +5,7 @@ title: Webhooks
 
 # Webhooks sortants
 
-`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : seize
+`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : des
 fichiers sous `src/modules/webhooks/` — `target.rs` compris —, une migration pour la table
 `webhook_subscriptions`, trois routes, et un POST HTTP signé vers chaque abonné qui écoute.
 
@@ -22,7 +22,7 @@ n'importe qui de faire livrer chez lui les événements du projet, et `user.crea
 des adresses. Sur un projet nu, les cinq descendent dans un seul plan — en voici un
 extrait :
 
-{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
@@ -177,6 +177,7 @@ dirait.
 
 Les octets signés sont l'horodatage, un point, puis le corps verbatim :
 
+{/* rbs:libre raison="formule de signature, non une sortie" */}
 ```text
 HMAC-SHA256(secret, "<horodatage>.<corps brut>")
 ```

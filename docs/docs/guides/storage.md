@@ -5,7 +5,7 @@ title: Storage
 
 # Storage
 
-`rbs add storage` installs object storage into an existing project: four files under
+`rbs add storage` installs object storage into an existing project: files under
 `src/modules/storage/`, and an `Arc<dyn Storage>` on your `AppState`. Two backends come with it —
 the local filesystem and S3 — and the point of the feature is that your code cannot tell
 which one it is talking to.
@@ -17,11 +17,12 @@ documentation.
 
 ## What gets installed
 
+{/* rbs:transcript cmd="rbs add storage" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
 $ rbs add storage
 storage : stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/storage/mod.rs           créé
   + src/modules/storage/files.rs         créé
@@ -172,8 +173,9 @@ guide](./auth.md#closed-by-default-at-generation-time) lists what to remove.
 
 Without the `storage` feature the flag is refused before anything is written:
 
+{/* rbs:transcript cmd="rbs generate crud uploads --fields title:string --with-upload" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
-$ rbs generate crud uploads --fields "title:string" --with-upload
+$ rbs generate crud uploads --fields title:string --with-upload
 erreur : `--with-upload` exige la feature `storage`, absente de ce projet : lancez `rbs add storage`, puis relancez la génération
 ```
 

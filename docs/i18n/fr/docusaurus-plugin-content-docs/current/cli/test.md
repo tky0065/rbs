@@ -16,6 +16,7 @@ de cette page sont verbatim, capturés en lançant la commande.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs test --help" */}
 ```text
 $ rbs test --help
 Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace
@@ -46,6 +47,7 @@ Comme [`rbs dev`](./dev.md), `rbs test` montre ce qu'elle va faire avant de le f
 trois premières étapes sont celles de `rbs dev` — le même code les planifie — et le
 serveur y est remplacé par les tests :
 
+{/* rbs:transcript cmd="rbs test --no-compose articles -- --nocapture" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
   base        127.0.0.1:1
   migrations  rbs migrate up
@@ -81,6 +83,7 @@ Une CI qui enchaîne `rbs test` distingue donc un test rouge d'une commande qui 
 démarrer, dont le code est 1, 2 ou 3 selon ce qui l'a arrêtée — voir les [codes de
 sortie](./doctor.md#codes-de-sortie). Un test rouge se termine sur :
 
+{/* rbs:libre raison="exige un test rouge, donc une base démarrée et la compilation entière du projet" */}
 ```text
 erreur : `cargo test` a échoué (code 101)
 ```
@@ -90,6 +93,7 @@ erreur : `cargo test` a échoué (code 101)
 Tout ce qui précède les tests échoue comme [`rbs dev`](./dev.md#échecs), avec les mêmes
 messages :
 
+{/* rbs:transcript cmd="rbs test --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 en attente de la base (127.0.0.1:1) ...
 erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée

@@ -6,7 +6,7 @@ title: Webhooks
 # Outgoing webhooks
 
 `rbs add webhooks` gives a project a way to tell the outside world what just happened:
-sixteen files under `src/modules/webhooks/` — `target.rs` included — a migration for the
+files under `src/modules/webhooks/` — `target.rs` included — a migration for the
 `webhook_subscriptions` table, three routes, and a signed HTTP POST for every subscriber
 that listens.
 
@@ -23,7 +23,7 @@ let anyone have the project's events delivered to their own server, and `user.cr
 carries addresses. On a bare project all five go down in a single plan — here is an excerpt
 of it:
 
-{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
@@ -174,6 +174,7 @@ after the work was done is enough — and without that identifier nothing would 
 
 The signed bytes are the timestamp, a dot, then the body verbatim:
 
+{/* rbs:libre raison="formule de signature, non une sortie" */}
 ```text
 HMAC-SHA256(secret, "<timestamp>.<raw body>")
 ```

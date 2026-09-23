@@ -64,6 +64,28 @@ cargo test --workspace -- --ignored        # 17 tests, plusieurs minutes, Docker
 La CI lance les deux, sur chaque pull request. Si vous ne pouvez pas jouer les tests
 ignorés en local, dites-le dans la pull request — ne les faites pas taire.
 
+## Le scénario d'agent
+
+`AGENTS.md` promet qu'un agent de code, parti d'un projet fraîchement engendré, produit une
+feature complète en passant par le CLI. `scenarios/commentaires/` éprouve cette promesse :
+une tâche versionnée confiée à Claude Code, lancée **à la main avant chaque version
+mineure** et jamais en CI — un agent n'est pas un test reproductible, et chaque passe coûte.
+
+```bash
+scenarios/commentaires/preparer.sh /tmp/passe     # auth, frontend-admin, une ressource articles
+scenarios/commentaires/lancer.sh /tmp/passe/blog  # claude -p "$(cat prompt.md)" dans le projet
+scenarios/commentaires/verdict.sh /tmp/passe/blog # sort en erreur s'il manque quoi que ce soit
+```
+
+Les trois prennent le `rbs` et le `rbs-core` du dépôt, jamais ceux d'une installation. Le
+prompt ne nomme aucune commande `rbs`, à dessein : les trouver par `AGENTS.md` est
+précisément ce qu'on éprouve. Le verdict exige quatre constats — une entité déclarée par
+le CLI, rattachée aux articles et portant `status` `visible|masque` ; `rbs doctor` sorti
+en 0 ; aucun avertissement « écrit hors du CLI » ; les tests du projet verts avec
+`--include-ignored` contre un PostgreSQL qu'il lance lui-même, sur un port tiré au hasard,
+et retire ensuite. Il demande Docker et `jq`. Une passe réussie se consigne dans
+`ROADMAP.md`, avec la version de rbs, celle de l'agent et la date.
+
 ## Conventions
 
 **Les commits suivent les [Conventional Commits](https://www.conventionalcommits.org), et
@@ -91,9 +113,8 @@ Travaillez sur une branche dédiée, jamais sur `main`.
   marqué `{/* rbs:transcript cmd="…" */}`, il est rejoué par `integration_docs` et comparé
   à ce que la commande affiche réellement. Un bloc qui ne peut pas être rejoué se déclare
   libre, avec sa raison — `{/* rbs:libre raison="…" */}` sur le site,
-  `<!-- rbs:libre raison="…" -->` dans un README. Un bloc nu fait échouer les tests : la liste d'exemptions de
-  `crates/rbs-cli/tests/transcriptions-exemptees.txt` ne couvre que des blocs antérieurs
-  à la garde, et n'en accueille jamais un neuf.
+  `<!-- rbs:libre raison="…" -->` dans un README. Un bloc nu fait échouer les tests, qui
+  nomment son `fichier:ligne` ; aucune liste d'exemptions n'existe.
 
 **Architecture :** les features ont une dépendance unidirectionnelle stricte —
 `controller → service → repository → model`. Un service n'accède jamais à

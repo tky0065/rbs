@@ -46,14 +46,14 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, au lieu du texte coloré. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) porte le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit le manifeste du fragment dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire — le même répertoire qu'`add` aurait utilisé pour l'installer. |
 
-Sans `--template-dir`, seuls les quinze noms qu'`add` installe sont acceptés par `remove`.
+Sans `--template-dir`, seuls les noms qu'`add` installe sont acceptés par `remove`.
 Un CRUD engendré par `rbs generate crud` n'en fait pas partie, même si son nom voisine les
 vrais fragments dans `[package.metadata.rbs] features` : `remove` le refuse exactement
 comme il refuse un nom qui n'a jamais désigné une feature.
 
 ## Retirer une feature
 
-{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" */}
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" */}
 ```text
 $ rbs remove cors
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -93,7 +93,7 @@ La migration d'un fragment est retrouvée par le suffixe de son nom de fichier, 
 manifeste ne gardant l'horodatage auquel elle a été créée, et retirée comme n'importe quel
 autre fichier :
 
-{/* rbs:transcript cmd="rbs remove jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add jobs && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m jobs" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs remove jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add jobs && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m jobs" dans="demo" extrait="oui" */}
 ```text
 $ rbs remove jobs
   - migration/src/m20260917_141948_create_jobs.rs   supprimé
@@ -121,7 +121,7 @@ la place du développeur.
 
 ## Des fragments qui l'exigent encore
 
-{/* rbs:transcript cmd="rbs remove mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m auth && rbs add webhooks && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m webhooks" dans="demo" */}
+{/* rbs:transcript cmd="rbs remove mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m auth && rbs add webhooks && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m webhooks" dans="demo" */}
 ```text
 $ rbs remove mail
 erreur : `mail` est encore exigée par auth, webhooks : retirez-les d'abord, dans l'ordre de votre choix
@@ -139,7 +139,7 @@ retirez-les d'abord, dans l'ordre qui vous convient.
 Cinq choses qu'un retrait laisse intactes, toutes nommées dans le rapport plutôt que
 traitées :
 
-{/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m docker" dans="demo" */}
+{/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m docker" dans="demo" */}
 ```text
 $ rbs remove docker
 docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
@@ -188,7 +188,7 @@ plan pour …/demo
 
 ## Un nom inconnu
 
-{/* rbs:transcript cmd="rbs remove graphql" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs remove graphql" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs remove graphql
 erreur : `graphql` n'est pas un fragment : api-keys, audit, auth, ci, cors, docker, frontend, frontend-admin, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
@@ -203,7 +203,7 @@ installé — il reste refusé.
 Retirer ce qui n'est pas installé n'est pas un échec — la même règle
 qu'[`add`](./add.md#lidempotence) suit, en miroir :
 
-{/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs remove docker
 ✓ docker n'est pas installée — rien à faire
@@ -218,9 +218,10 @@ qui se trouvent sur le disque.
 `remove` édite `Cargo.toml`, donc — comme `add` — elle refuse de s'exécuter sur des
 modifications non commitées :
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors && rbs add ci" dans="demo" */}
 ```text
 $ rbs remove cors
-erreur : le working tree n'est pas propre : src/main.rs — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : AGENTS.md, Cargo.toml — commitez, ou relancez avec --force
 ```
 
 Les fichiers non suivis ne comptent pas : rien ici ne s'apprête à en créer un. `--force`
@@ -233,6 +234,7 @@ rendrait aujourd'hui le fragment n'est ni supprimé ni laissé silencieusement e
 plan le marque `!`, et la commande s'arrête, exactement comme le conflit d'`add` pour un
 fichier qu'elle écraserait :
 
+{/* rbs:libre raison="exige de modifier à la main src/modules/cors/config.rs, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs remove cors
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -260,6 +262,7 @@ rien n'est écrit du tout — ni `config.rs`, ni les deux suppressions, ni les c
 modifications autour. `--force` écrit le plan tout entier quand même, `config.rs`
 compris, le même plan affiché d'abord :
 
+{/* rbs:libre raison="exige la même modification à la main de src/modules/cors/config.rs" */}
 ```text
 $ rbs remove cors --force
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -305,6 +308,7 @@ fichiers, ses lignes d'ancre, sa migration, ses dépendances. Tout ce que le dé
 écrit *contre* la feature lui est invisible, et c'est exactement à cela que sert
 `cargo build` — la ligne que tout retrait réussi affiche :
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" extrait="oui" */}
 ```text
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
@@ -318,7 +322,7 @@ Le compilateur nomme chaque référence restante, une erreur à la fois, avec ex
 en un seul document plutôt qu'en texte coloré. `fichiers` porte un troisième compteur à
 côté des deux d'`add` — `supprimes`, pour ce qu'un retrait fait le plus souvent :
 
-{/* rbs:transcript cmd="rbs remove cors --dry-run --json" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs remove cors --dry-run --json" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" extrait="oui" */}
 ```text
 $ rbs remove cors --dry-run --json
   "fichiers": {
@@ -336,6 +340,7 @@ imprime : le document JSON de la sortie standard ne porte que le plan.
 
 Hors d'un projet :
 
+{/* rbs:transcript cmd="rbs remove cors" */}
 ```text
 $ rbs remove cors
 erreur : aucun projet rbs ici : `rbs remove` s'exécute dans un projet créé par `rbs new`

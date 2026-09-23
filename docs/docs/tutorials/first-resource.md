@@ -5,7 +5,7 @@ title: Your first resource
 
 # Your first resource
 
-This is the second of nine tutorials, and it picks up `demo` exactly where
+This is the second tutorial, and it picks up `demo` exactly where
 [Setting up](./setup.md) left it: running, with nothing mounted but a health check. This
 one adds the shape most APIs are built from — a table you create, list, and edit — with
 one command that turns a `--fields` declaration into an entity, its migration, and every
@@ -68,6 +68,7 @@ have inserted instead of touching the file.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields title:string,body:text,published:bool" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.74s
@@ -88,6 +89,7 @@ start it again:
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -107,6 +109,7 @@ curl -i -X POST http://127.0.0.1:8080/articles \
   -d '{"title":"Premier article","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 201 Created
 content-type: application/json
@@ -124,6 +127,7 @@ built and stored by the server, not echoed back from what was sent.
 curl http://127.0.0.1:8080/articles
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"data":[{"id":"01a0857e-2f85-7d03-a129-6defbf74c73c","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-09-09T09:27:14.569998Z","updated_at":"2026-09-09T09:27:14.569998Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 ```

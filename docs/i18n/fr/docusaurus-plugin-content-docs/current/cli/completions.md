@@ -25,6 +25,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs completions --help" */}
 ```text
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
@@ -109,11 +110,12 @@ complétion qui refuserait ce que la commande accepte vaudrait moins que pas de 
 du tout.
 
 Fish et PowerShell sont les deux shells dont le générateur s'arrête avant les valeurs d'un
-argument positionnel : là, `rbs add ` complète les drapeaux mais pas les quinze noms. C'est
+argument positionnel : là, `rbs add ` complète les drapeaux mais pas les noms de features. C'est
 une limite du générateur, non de la déclaration.
 
 ## Un shell inconnu
 
+{/* rbs:transcript cmd="rbs completions nushell" */}
 ```text
 $ rbs completions nushell
 erreur : valeur « nushell » invalide pour « <SHELL> »

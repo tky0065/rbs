@@ -5,6 +5,16 @@ et SeaORM. Elle fait partie de [rbs](https://github.com/tky0065/rbs).
 
 *[English version](README.md).*
 
+![Un terminal : rbs --version, rbs new, rbs add frontend-admin, rbs generate crud, make dev, puis un curl qui crée un ticket et le rend](https://raw.githubusercontent.com/tky0065/rbs/main/docs/static/img/enregistrement/terminal.gif)
+
+![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](https://raw.githubusercontent.com/tky0065/rbs/main/docs/static/img/enregistrement/admin.png)
+
+*Enregistré avec rbs 1.8.1 par
+[`regenere.sh`](https://github.com/tky0065/rbs/blob/main/docs/scripts/enregistrement/regenere.sh),
+qui rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
+commandes — la base, les migrations et le seed, `npm install`, le client typé, la
+compilation, la connexion qui remplit `$TOKEN` — est coupé au montage, pas omis.*
+
 ## Installation
 
 ```bash
@@ -32,7 +42,7 @@ SQLite 3.35 ou plus.
 | `rbs new <nom>` | Crée un projet prêt à démarrer : base de données, migrations, route `/health` |
 | `rbs add <feature>` | Installe une feature : `api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler`, `storage`, `webhooks` |
 | `rbs generate crud <nom>` | Engendre une feature CRUD complète — entité et migration comprises |
-| `rbs generate feature <nom>` | Engendre une feature vide : six fichiers, aucun champ |
+| `rbs generate feature <nom>` | Engendre une feature vide, sans champ ni migration |
 | `rbs migrate up\|down\|status\|new` | Pilote les migrations du projet |
 | `rbs seed` | Insère les données de démonstration du projet |
 | `rbs dev` | Démarre les services et les migrations, et relance le serveur à chaque changement |

@@ -5,7 +5,7 @@ title: Seeing what the API does
 
 # Seeing what the API does
 
-This is the eighth of nine tutorials. It picks up `demo`; this page needs nothing
+This is the eighth tutorial. It picks up `demo`; this page needs nothing
 beyond [Setting up](./setup.md). The case: one route has gone slow, and there is no way
 yet to say since when, or which one.
 
@@ -19,7 +19,7 @@ Nothing beyond [Setting up](./setup.md): the same running `demo`, and `curl` aga
 rbs add observability
 ```
 
-{/* rbs:transcript cmd="rbs add observability" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add observability" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add observability
 observability : observabilité : traces OTLP vers un collecteur, et un /metrics Prometheus sur son propre port
@@ -68,6 +68,7 @@ and the rule to keep it internal is a firewall one, written once.
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
 INFO   demo                démarrage  adresse=127.0.0.1:8080
@@ -86,6 +87,7 @@ From the second terminal, the app's own port first:
 curl -i http://127.0.0.1:8080/metrics
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 404 Not Found
 x-request-id: 01M22V0E32T6TBZPBRYZNR0NRW
@@ -100,6 +102,7 @@ refuses, a path it does not carry. And the listener that does carry it:
 curl -i http://127.0.0.1:9090/metrics
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: text/plain; charset=utf-8
@@ -182,7 +185,7 @@ production traffic reaches it in hours, not months, once that discipline slips.
   installs.
 - [Logs](../guides/logs.md) covers the subscriber traces graft onto, and the `pretty`
   formatter behind every line this page's server printed.
-- [`rbs add`](../cli/add.md) covers the twelve other features `demo` could still
+- [`rbs add`](../cli/add.md) covers the other features `demo` could still
   install, `observability` now on it.
 - [Calling the API from TypeScript](./typescript-client.md) is the last tutorial: a
   front end that calls `articles` through a client read from the API's own OpenAPI

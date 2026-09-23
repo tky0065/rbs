@@ -17,7 +17,7 @@ Il exige `auth`, qui entraîne à son tour `mail` et `rate-limit` : une clé app
 compte, porte un rôle, et les deux viennent de là. Sur un projet nu, les quatre descendent
 dans un seul plan — en voici un extrait :
 
-{/* rbs:transcript cmd="rbs add api-keys" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add api-keys" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add api-keys
 api-keys : clés d'API : authentification machine, rôle plafonné par le porteur, trace d'usage
@@ -178,7 +178,7 @@ ouvrir la requête en cours.
 
 ## Les tests
 
-Onze tests accompagnent le fragment, sous `src/modules/api_keys/tests/`. Ils joignent la base
+Les tests du fragment l'accompagnent, sous `src/modules/api_keys/tests/`. Ils joignent la base
 que décrit votre `.env`, et portent donc `#[ignore]` : `cargo test -- --ignored` les lance
 une fois `rbs migrate up` appliquée.
 

@@ -57,6 +57,7 @@ marqueurs.
 
 ## Les lancer
 
+{/* rbs:transcript cmd="rbs seed" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud subscribers --fields email:string:unique,name:string,confirmed:bool && rbs migrate up" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs seed
 subscribers : inséré
@@ -66,6 +67,7 @@ subscribers : inséré
 Une ligne par seed, dans l'ordre de l'ancre, et un résumé. Sur un projet où aucun seed n'a
 encore été déclaré :
 
+{/* rbs:transcript cmd="rbs seed" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ rbs seed
 ✓ aucun seed déclaré — rien à insérer
@@ -77,6 +79,7 @@ Code de sortie 0, et cargo n'est jamais démarré. Un projet qui n'a rien à ins
 :::warning
 `rbs seed` refuse de tourner sous `RBS_ENV=production` :
 
+{/* rbs:libre raison="la commande pose RBS_ENV dans son environnement, ce que le rejeu ne sait pas faire" */}
 ```text
 $ RBS_ENV=production rbs seed
 erreur : RBS_ENV=production : les seeds sont des données de démonstration, et rbs refuse de les insérer en production — relancez avec --force si c'est bien ce que vous voulez

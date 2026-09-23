@@ -5,7 +5,7 @@ title: Scheduler
 
 # Le déclenchement calendaire
 
-`rbs add scheduler` donne un calendrier à un projet : neuf fichiers sous `src/modules/scheduler/`,
+`rbs add scheduler` donne un calendrier à un projet : des fichiers sous `src/modules/scheduler/`,
 une migration pour la table `schedules`, et un ticker démarré avec le serveur. C'est la
 réponse à la dernière ligne du [guide des jobs](./jobs.md) — une file sait exécuter un
 travail et le réessayer, mais rien ne l'enfile sinon un événement que vous écrivez.
@@ -16,11 +16,11 @@ journalisation et l'exécution existent déjà et sont éprouvés — les rééc
 raison qu'une horloge les aurait lancés donnerait deux boucles à maintenir au lieu d'une.
 
 C'est pourquoi le fragment exige `jobs`, et c'est le seul du
-[tableau d'`rbs add`](../cli/add.md#les-seize-features) à entraîner une autre feature avec
+[tableau d'`rbs add`](../cli/add.md#les-features) à entraîner une autre feature avec
 lui, en dehors d'`auth`. Sur un projet nu, `rbs add scheduler` pose `jobs` d'abord et
 `scheduler` ensuite, dans un même plan :
 
-{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add scheduler
 scheduler : déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas

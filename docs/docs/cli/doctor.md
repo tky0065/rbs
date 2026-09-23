@@ -5,7 +5,7 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnoses a generated project through seven checks — eight on a SQLite project: the
+Diagnoses a generated project through independent checks — among them the
 anchors, [`AGENTS.md`](../guides/agents.md), the relations already written into its models,
 the `.env`, the versions, the database, the fragment layout, and, under SQLite alone, the
 `decimal` columns its driver cannot read. Each is independent and returns its verdict
@@ -19,6 +19,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs doctor --help" */}
 ```text
 $ rbs doctor --help
 Diagnostique le projet : ancres, .env, base joignable, versions
@@ -43,10 +44,10 @@ that read it, so passing one is a clap error rather than a flag that is taken an
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The sixteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` and `// <rbs:job_modules>` in `src/modules/jobs/mod.rs`, `// <rbs:schedules>` in `src/modules/scheduler/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs`, `// <rbs:auth_impl>` in `src/auth/mod.rs` — the one anchor that sits inside an `impl` block — plus three in TypeScript, which comments the way Rust does: `// <rbs:vite_proxy>` in `frontend/vite.config.ts`, `// <rbs:admin_routes>` in `frontend/src/admin/montage.ts` and `// <rbs:admin_rail>` in `frontend/src/admin/rail.ts`, and three carrying Git's `#` marker: `# <rbs:services>` in `docker-compose.yml`, `# <rbs:ignore>` in `.gitignore` and `# <rbs:make>` in the `Makefile`, twenty-two in all. Eleven are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs` and `job_modules`, on one that has not installed the queue; `schedules`, on one that has not installed the calendar; `services`, on one with no compose; `auth_impl`, on one that has not installed sign-in; `vite_proxy`, on one that has not installed the [client](../guides/frontend.md); `admin_routes` and `admin_rail`, on one that has not installed the admin shell; `ignore` and `make`, on one whose owner deleted the `.gitignore` or the `Makefile` the skeleton wrote. An optional anchor missing from a file that exists fails the check, except when the file lacks the very line `--fix` would put it under: the file predates the anchor — `schedules`, on a calendar still written as a `vec![]` literal —, and the check only warns, with the rewrite to make. A half-deleted anchor, or a hook line found twice, still fails it. |
+| `ancres` | The Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` and `// <rbs:job_modules>` in `src/modules/jobs/mod.rs`, `// <rbs:schedules>` in `src/modules/scheduler/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs`, `// <rbs:auth_impl>` in `src/auth/mod.rs` — the one anchor that sits inside an `impl` block — plus three in TypeScript, which comments the way Rust does: `// <rbs:vite_proxy>` in `frontend/vite.config.ts`, `// <rbs:admin_routes>` in `frontend/src/admin/montage.ts` and `// <rbs:admin_rail>` in `frontend/src/admin/rail.ts`, and three carrying Git's `#` marker: `# <rbs:services>` in `docker-compose.yml`, `# <rbs:ignore>` in `.gitignore` and `# <rbs:make>` in the `Makefile`, {/* rbs:chiffre ancres */}twenty-two in all. {/* rbs:chiffre ancres-optionnelles */}Eleven are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs` and `job_modules`, on one that has not installed the queue; `schedules`, on one that has not installed the calendar; `services`, on one with no compose; `auth_impl`, on one that has not installed sign-in; `vite_proxy`, on one that has not installed the [client](../guides/frontend.md); `admin_routes` and `admin_rail`, on one that has not installed the admin shell; `ignore` and `make`, on one whose owner deleted the `.gitignore` or the `Makefile` the skeleton wrote. An optional anchor missing from a file that exists fails the check, except when the file lacks the very line `--fix` would put it under: the file predates the anchor — `schedules`, on a calendar still written as a `vec![]` literal —, and the check only warns, with the rewrite to make. A half-deleted anchor, or a hook line found twice, still fails it. |
 | `agents` | [`AGENTS.md`](../guides/agents.md): present, its two zones present, the guide's version matching the CLI's, the inventory matching the project, every declared feature backed by a directory — and, only as a warning, a directory under `src/` that nothing declares. Covered on its own below. |
 | `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
-| `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
+| `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. A key `.env.example` leaves empty (`KEY=`, `KEY=""`, or `KEY=` followed by a comment) may be missing: the check counts it apart and names it, but does not fail — `RBS_MAIL__SMTP_PASSWORD`, which `mail` declares empty, would otherwise fail `doctor` on a project fresh from `rbs new`. |
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
 | `base` | The driver compiled into the manifest against the URL's scheme, then a TCP connection within three seconds, then the server version — asked of the `migration` crate's binary, since rbs embeds no SQL client. Each engine has its own floor, and each floor has a reason: PostgreSQL 14, the oldest still maintained; MySQL 8.0, for `FOR UPDATE SKIP LOCKED`; SQLite 3.35, for `UPDATE … RETURNING`. |
 | `disposition` | Whether the project mixes the two layouts a fragment can land in: a directory `rbs add` used to write at the root of `src/` — any of `audit`, `cache`, `cors`, `jobs`, `mail`, `observability`, `rate_limit`, `scheduler`, `storage`, `webhooks` — still there alongside a `src/modules/` the project has since started to receive. Only a warning: the fix is a manual move, since rewriting your own `use` statements is not the CLI's to do. `auth` is never counted — it lives at the root by design. |
@@ -59,6 +60,7 @@ The driver comes before the connection on purpose. A server that answers proves 
 when the driver compiled into your binary cannot speak its protocol, and probing the port
 first would charge three seconds to a diagnosis that fits in two file reads:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une URL mysql dans le .env d'un projet compilé pour PostgreSQL" */}
 ```text
   ✗ base        le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
       alignez les deux : la feature `sqlx-mysql` de sea-orm au manifeste, ou une URL `postgres://` dans le .env
@@ -73,6 +75,7 @@ Every other verdict above is pass or fail. `agents` can also warn, on one condit
 a directory under `src/` that no installed fragment and no feature declared in
 `[package.metadata.rbs]` accounts for — code nobody generated.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : un répertoire sous src/ qu'aucune feature ne déclare" */}
 ```text
   ! agents      écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
@@ -91,8 +94,9 @@ The second warning belongs to `gardes`, and only exists on a project carrying
 [`auth`](../guides/auth.md): a feature whose `create`, `update` or `delete` calls no
 `require_role`.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo && rbs generate crud articles --fields titre:string --force && rbs generate feature comments --force && rbs add auth --force" dans="demo" extrait="oui" */}
 ```text
-  ! gardes      écritures anonymes : articles, comments
+  ! gardes        écritures anonymes : articles, comments
       fermez-les à la main : sur chaque handler, ajoutez le paramètre `identite: Identity`, l'appel `identite.require_role(Role::User)?`, l'entrée `security(("bearer" = []))` et les réponses 401 et 403 de son annotation — un CRUD engendré sous `auth` les reçoit désormais tout seul ; voir le guide de l'authentification
 ```
 
@@ -112,6 +116,7 @@ The third belongs to `disposition`, on a project that carries both layouts a fra
 land in — one of the ten directories `rbs add` used to write at the root of `src/`, still
 there alongside a `src/modules/` the project has since started to receive:
 
+{/* rbs:libre raison="exige un projet dont une feature a été posée par une version antérieure, à la racine de src/" */}
 ```text
   ! disposition   hors de src/modules/ : src/mail
       posés par une version antérieure ; rbs ne les déplacera pas — déplacez-les et corrigez leurs `use` si vous voulez une disposition unique
@@ -129,6 +134,7 @@ Each feature that carries configuration adds a line of its own, and the line onl
 on a project that declared the feature. `auth` adds two — its secret, and the `gardes`
 check above. `jobs` is the one this milestone added:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : la section [jobs] retirée de config/default.toml" */}
 ```text
   ✗ jobs        config/default.toml ne porte pas de section `[jobs]`
       ajoutez à config/default.toml :
@@ -148,6 +154,7 @@ cold, before you start it. A section commented out does not count as a section.
 [`observability`](../guides/observability.md) reads one value rather than merely looking
 for its section: the port its second listener binds may not be the one the API listens on.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : metrics_port ramené au port du serveur" */}
 ```text
   ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
       donnez aux métriques un port à elles dans config/default.toml :
@@ -177,6 +184,7 @@ misbehaves.
 A file one of these fragments wrote and that has since disappeared is restored from Git,
 and the remedy says so: `rbs add` does not replay a feature the manifest already declares.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : l'inscription de la livraison des webhooks retirée du registre de la file" */}
 ```text
   ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
       énumérez les origines de votre front dans config/default.toml — ou dans le profil de l'environnement qui les sert :
@@ -195,6 +203,7 @@ grepping for a cross. The exit code keeps the meaning it already had: 0 when the
 healthy, 1 when a check failed — 2 or 3 when the diagnosis could not run, see
 [exit codes](#exit-codes).
 
+{/* rbs:transcript cmd="rbs doctor --json" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:5499/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs doctor --json
 {
@@ -203,7 +212,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 17 points d'insertion sont en place"
+      "detail": "les 14 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -231,12 +240,12 @@ that line before it blocks rather than after, so a silent wait is never mistaken
 hang. Cargo's own progress stays out of the report: it is captured, and replayed only when
 the build fails, as the last example on this page shows.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
-  ✓ base        postgres 18.6 répond sur 127.0.0.1:5432
+  ✓ .env          les 7 variables de .env.example sont renseignées
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
+  ✓ base          postgres 18.6 répond sur 127.0.0.1:5432
 ✓ le projet est sain
 ```
 
@@ -267,6 +276,7 @@ Exit status 0.
 Below, the same project with `// <rbs:openapi>` deleted from `src/openapi.rs`,
 `RBS_LOG_FORMAT` removed from `.env`, and PostgreSQL stopped:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une ancre et une variable du .env retirées, la base arrêtée" */}
 ```text
 $ rbs doctor
   ✗ ancres        openapi manque dans src/openapi.rs
@@ -310,6 +320,7 @@ not moved since.
 
 Below, a project whose `// <rbs:openapi>` and `// <rbs:state_init>` were deleted:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : deux ancres retirées d'un projet SQLite" */}
 ```text
 $ rbs doctor --fix --force
 plan pour /private/tmp/rbs-demo/demo
@@ -340,6 +351,7 @@ the two files fail, the other is put back as it was.
 How exact the placement is can be read straight off Git, on a project whose anchors were
 deleted after the commit:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : des ancres retirées après le commit" */}
 ```text
 $ git diff --stat
 ```
@@ -348,6 +360,7 @@ Nothing. The two blocks came back to the byte where the skeleton had put them.
 
 ## A dirty working tree
 
+{/* rbs:libre raison="exige de modifier le projet à la main : des ancres retirées, que --fix reposerait" */}
 ```text
 $ rbs doctor --fix
 erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
@@ -361,6 +374,7 @@ The guard comes after the plan, not before it: a project with no anchor to put b
 nothing to protect, and `rbs doctor --fix` on a healthy project must be able to answer from
 a working tree full of work in progress.
 
+{/* rbs:transcript cmd="rbs doctor --fix" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs doctor --fix
 ✓ aucune ancre à reposer
@@ -372,6 +386,7 @@ A hook line that the file does not carry — or carries twice — no longer says
 block goes. `--fix` then leaves the anchor where it is not, names it, and the check below
 prints the block to paste, exactly as it did before:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : deux ancres retirées, et la ligne d'accroche de l une d'elles" */}
 ```text
 $ rbs doctor --fix --force
 plan pour /private/tmp/rbs-demo/demo
@@ -405,6 +420,7 @@ behind does not say where the other one was — between them was everything the 
 Under `--json`, the repair has its own object, so a script does not have to deduce from a
 verdict turned green that something was written:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : la ligne d'accroche de layers retirée" */}
 ```text
 $ rbs doctor --fix --force --json
 {
@@ -442,6 +458,7 @@ The two halves of the `base` check fail separately. Here the host answers on the
 the version could not be read because the `migration` crate did not build — the remedy
 names the command to run by hand:
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une erreur introduite dans la crate migration, et une base qui répond" */}
 ```text
 $ rbs doctor
   ✓ ancres        les 15 points d'insertion sont en place
@@ -469,6 +486,7 @@ attention : le projet demande votre attention
 
 ## Outside a project
 
+{/* rbs:transcript cmd="rbs doctor" */}
 ```text
 $ rbs doctor
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici

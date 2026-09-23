@@ -1,5 +1,15 @@
 # rbs
 
+![Un terminal : rbs --version, rbs new, rbs add frontend-admin, rbs generate crud, make dev, puis un curl qui crée un ticket et le rend](docs/static/img/enregistrement/terminal.gif)
+
+![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](docs/static/img/enregistrement/admin.png)
+
+*Enregistré avec rbs 1.8.1 par
+[`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), qui
+rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
+commandes — la base, les migrations et le seed, `npm install`, le client typé, la
+compilation, la connexion qui remplit `$TOKEN` — est coupé au montage, pas omis.*
+
 Un cadre de travail Rust pour les API web, bâti sur Axum et SeaORM. Il donne à un projet ce
 qui n'a aucune raison de varier d'une API à l'autre — erreurs, logs, configuration, accès à
 la base, OpenAPI — et génère le reste dans vos propres sources, où vous pouvez le lire et le
@@ -9,9 +19,8 @@ modifier.
 
 ## Statut
 
-Version 1.8.1. Les huit jalons de la feuille de route sont livrés — le socle,
-l'authentification, les intégrations, le confort, la stabilité, les agents — et
-[`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
+Version 1.8.1. [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'apporte chaque version, et
+[`ROADMAP.md`](ROADMAP.md) quels jalons sont livrés et lesquels viennent ensuite.
 
 **rbs suit le versionnage sémantique à partir de la 1.0.** L'API publique de `rbs-core` est
 figée : à l'intérieur de la 1.x, rien n'est retiré, renommé ni doté d'un autre sens, et
@@ -20,7 +29,7 @@ des ancres en commentaires et de `[package.metadata.rbs]` est couvert lui aussi 
 engendré par une version du CLI reste lisible par la suivante. Le code engendré dans vos
 propres sources ne l'est pas — il vous appartient dès qu'il est écrit, et aucune version de
 rbs ne le réécrit. La [page de compatibilité](https://tky0065.github.io/rbs/fr/compatibility)
-énonce les cinq périmètres.
+dit ce que couvre la promesse, et ce qu'elle laisse dehors.
 
 ## Installation
 
@@ -115,8 +124,7 @@ service, lui, ne voit jamais de `DatabaseConnection`.
 ## Documentation
 
 Le site est à l'adresse **<https://tky0065.github.io/rbs/fr/>** : démarrage, architecture,
-référence du CLI, guides. Le binaire porte huit commandes — `new`, `add`, `generate`,
-`migrate`, `seed`, `dev`, `doctor`, `upgrade` — et le site documente chacune d'elles.
+référence du CLI, guides. Le site documente chaque commande que porte le binaire.
 
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'a apporté chaque version, écrit pour qui
 installe rbs. [`ROADMAP.md`](ROADMAP.md) prend l'autre sens : ce que couvrent les jalons, et

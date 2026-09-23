@@ -5,7 +5,7 @@ title: Envoyer un mail
 
 # Envoyer un mail
 
-C'est le cinquième des neuf tutoriels. Il reprend `demo` juste après [Recevoir un
+C'est le cinquième tutoriel. Il reprend `demo` juste après [Recevoir un
 fichier](./storage.md) — en cours d'exécution, avec la ressource `uploads` et ses routes
 de contenu de cette page. Le cas : dès que `create` réussit, quiconque possède
 `owner_email` reçoit un mail lui disant que son fichier est enregistré — un accusé de
@@ -22,7 +22,7 @@ d'exécution, avec `uploads` et ses routes de contenu montées.
 rbs add mail
 ```
 
-{/* rbs:transcript cmd="rbs add mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add mail
 mail : envoi de courriels par SMTP : transport partagé, gabarits minijinja
@@ -87,17 +87,19 @@ détaché rend-il la main avant que le message ne soit parti ?
 cargo test modules::mail::
 ```
 
+{/* rbs:libre raison="cargo test compile le projet entier, plusieurs minutes, et l'ordre de ses lignes suit l'ordonnanceur des threads" */}
 ```text
-running 7 tests
+running 8 tests
 test modules::mail::tests::an_invalid_sender_stops_the_build_naming_it ... ok
 test modules::mail::tests::the_message_carries_the_configured_sender_and_its_recipient ... ok
 test modules::mail::tests::a_missing_template_names_the_file_without_panicking ... ok
+test modules::mail::tests::send_template_detached_fails_on_a_missing_template_before_sending_anything ... ok
 test modules::mail::tests::the_rendered_template_carries_the_variables_passed_to_it ... ok
 test modules::mail::tests::send_detached_returns_without_awaiting_the_send ... ok
 test modules::mail::tests::the_three_encryption_modes_build_a_transport ... ok
 test modules::mail::tests::a_templated_message_goes_out_to_the_smtp_server ... ignored, joint le serveur SMTP de la section [mail]
 
-test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
 La preuve du compromis lui-même : `send_detached_returns_without_awaiting_the_send` ouvre
@@ -153,7 +155,7 @@ déjà repartie avec un `201`.
 
 - [Mail](../guides/mail.md) couvre le transport, les gabarits, et le déplacement d'un
   envoi vers une file quand le compromis ci-dessus n'est pas le bon.
-- [`rbs add`](../cli/add.md) couvre les onze autres features que `demo` pourrait encore
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait encore
   installer, `storage` et `mail` désormais sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel `mail/tests.rs` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.

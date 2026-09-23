@@ -5,7 +5,7 @@ title: Ne pas recalculer deux fois
 
 # Ne pas recalculer deux fois
 
-C'est le sixième des neuf tutoriels. Il reprend `demo` juste après [Recevoir un
+C'est le sixième tutoriel. Il reprend `demo` juste après [Recevoir un
 fichier](./storage.md) — en cours d'exécution, avec la ressource `uploads` de cette page.
 Le cas : un `COUNT(*)` lu mille fois par minute, que trois écritures rendent périmé dès
 qu'il change.
@@ -21,7 +21,7 @@ d'exécution, avec `uploads` monté.
 rbs add redis
 ```
 
-{/* rbs:transcript cmd="rbs add redis" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add redis" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add redis
 redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par serde
@@ -67,6 +67,7 @@ exactement les clés sous ce préfixe, et rien qui commence seulement de la mêm
 cargo test modules::cache::
 ```
 
+{/* rbs:libre raison="cargo test compile le projet entier, plusieurs minutes, et l'ordre de ses lignes suit l'ordonnanceur des threads" */}
 ```text
 running 7 tests
 test modules::cache::tests::a_missing_key_returns_none_and_not_an_error ... ok
@@ -138,9 +139,9 @@ rendu périmé.
 - [Cache](../guides/cache.md) couvre la construction, pourquoi elle reste synchrone, et
   ce que la feature vous laisse faire — la protection contre l'emballement en fait
   partie.
-- [`rbs add`](../cli/add.md) couvre les onze autres features que `demo` pourrait encore
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait encore
   installer, `storage` et `redis` désormais toutes deux sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel se scinde le `cache/tests.rs`
-  engendré — quatre tests sans serveur, trois qui en demandent un.
+  engendré — des tests sans serveur, d'autres qui en demandent un.
 - [Sortir le travail long de la requête](./jobs.md) est le tutoriel suivant : une
   campagne de 5 000 lettres, enfilées sans faire attendre l'appelant qu'une seule parte.

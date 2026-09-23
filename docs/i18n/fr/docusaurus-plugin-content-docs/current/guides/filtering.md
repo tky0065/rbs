@@ -13,6 +13,7 @@ vous.
 `rbs generate crud` produit désormais un septième fichier, `filter.rs`, et monte la route
 qui le lit :
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 POST /articles/filter
 ```
@@ -64,6 +65,7 @@ l'ordre reste l'`id` décroissant — un UUIDv7, ce qui rend la pagination stabl
 
 ## La pagination reste dans la chaîne de requête
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 POST /articles/filter?page=2&per_page=50
 ```
@@ -77,6 +79,7 @@ La porter aussi dans le corps donnerait deux sources à une même valeur.
 entre deux requêtes décale la fenêtre — la page 2 réaffiche une ligne que la page 1 avait
 déjà rendue. Au-delà de quelques milliers de lignes, `Cursor` la remplace :
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
 ```
@@ -160,7 +163,7 @@ lequel on veut filtrer, et l'indexer en vaut rarement la peine — mais un filtr
 colonne sans index parcourt la table. Quand l'une d'elles grandit, ajoutez `index` au champ
 et régénérez la migration :
 
-```text
+```bash
 rbs g crud articles --fields "title:string:index, published:bool"
 ```
 

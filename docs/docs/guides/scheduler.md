@@ -5,7 +5,7 @@ title: Scheduler
 
 # Scheduled triggers
 
-`rbs add scheduler` gives a project a calendar: nine files under `src/modules/scheduler/`, a
+`rbs add scheduler` gives a project a calendar: files under `src/modules/scheduler/`, a
 migration for the `schedules` table, and a ticker started with the server. It is the answer
 to the last line of the [jobs guide](./jobs.md) — a queue knows how to run work and retry
 it, but nothing enqueues anything except an event of your own.
@@ -16,11 +16,11 @@ logging and the execution already exist and are proven — rewriting them for th
 that a clock started them would leave two loops to maintain instead of one.
 
 That is why the fragment requires `jobs`, and it is the only one in the
-[`rbs add` table](../cli/add.md#the-sixteen-features) that pulls another feature along
+[`rbs add` table](../cli/add.md#the-features) that pulls another feature along
 besides `auth`. On a bare project, `rbs add scheduler` lays down `jobs` first and
 `scheduler` second, in a single plan:
 
-{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add scheduler
 scheduler : déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas

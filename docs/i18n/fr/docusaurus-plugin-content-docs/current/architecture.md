@@ -35,7 +35,7 @@ pour être modifié, et la frontière existe pour que le modifier suffise.
 
 ### Ce que porte le noyau
 
-Onze modules publics, tous du côté « personne ne veut relire ça » :
+Ses principaux modules publics, tous du côté « personne ne veut relire ça » :
 
 | Module | Ce qu'il fait | Pourquoi il ne varie jamais |
 |---|---|---|
@@ -85,6 +85,7 @@ API publique à geler. Les remplir est un ajout, jamais une rupture.
 Tout ce qui est du côté généré s'organise par feature, jamais par couche : un répertoire
 par ressource, six fichiers dedans. `rbs generate crud articles` les écrit tous.
 
+{/* rbs:libre raison="arborescence commentée, non la sortie d'une commande" */}
 ```text
 src/articles/
 ├── mod.rs          déclare les voisins, expose les routes
@@ -173,6 +174,7 @@ rejeté un corps illisible ou invalide avant que cette fonction ne s'exécute.
 
 Les six fichiers sont ordonnés, et les flèches pointent toutes dans le même sens :
 
+{/* rbs:libre raison="schéma des dépendances entre couches, non une sortie" */}
 ```text
 controller ──> service ──> repository ──> model
      │            │                          ▲
@@ -202,6 +204,7 @@ Demandons à la feature quels fichiers connaissent SeaORM :
 grep -l sea_orm examples/hello-crud/src/articles/*.rs
 ```
 
+{/* rbs:libre raison="grep lancé à la racine du dépôt sur examples/, que le rejeu, joué dans un répertoire temporaire, ne voit pas" */}
 ```text
 examples/hello-crud/src/articles/controller.rs
 examples/hello-crud/src/articles/dto.rs
@@ -223,6 +226,7 @@ en soit le seul appelant. La sonde plus étroite est la sonde honnête :
 grep -l 'Entity::' examples/hello-crud/src/articles/*.rs
 ```
 
+{/* rbs:libre raison="grep lancé à la racine du dépôt sur examples/, que le rejeu, joué dans un répertoire temporaire, ne voit pas" */}
 ```text
 examples/hello-crud/src/articles/repository.rs
 ```

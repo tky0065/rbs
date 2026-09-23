@@ -208,6 +208,13 @@ Le jalon renoue avec les critères de sortie, que les versions 1.2 à 1.8 avaien
 test ; un projet portant les seize fragments compile sous Linux, macOS et Windows ; le
 scénario d'agent passe, et son résultat est consigné avec la version qui l'a passé.
 
+**Passes du scénario d'agent** — `scenarios/commentaires/`, lancé à la main selon
+`CONTRIBUTING.fr.md`. Seule une passe dont `verdict.sh` sort en 0 s'inscrit ici ; tant
+que la table est vide, le critère de la v1.1 reste non éprouvé.
+
+| Date | rbs | Agent | Verdict |
+|---|---|---|---|
+
 ### v1.10 — Adoption
 
 Un développeur Rust qui découvre rbs sur crates.io doit comprendre en une minute ce que

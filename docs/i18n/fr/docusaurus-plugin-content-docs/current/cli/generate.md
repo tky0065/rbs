@@ -5,7 +5,7 @@ title: rbs generate
 
 # `rbs generate`
 
-Ajoute une feature à un projet existant : les six fichiers de la feature, plus — pour
+Ajoute une feature à un projet existant : les sept fichiers de la feature, plus — pour
 `crud` — un fichier de tests, une entité SeaORM et sa migration, écrits depuis `--fields`
 sans qu'aucune base ne tourne. C'est l'inverse de `sea-orm-cli generate entity`, qui exige
 un schéma préalable.
@@ -27,7 +27,7 @@ Utilisation : rbs generate <COMMANDE>
 
 Commandes :
   crud       Génère une feature CRUD complète, entité et migration comprises
-  feature    Génère une feature vide : six fichiers, aucun champ
+  feature    Génère une feature vide, sans champ ni migration
   client     Engendre un client typé depuis le document OpenAPI du projet
   job        Génère un job de la file, et son échéance sous --every ; exige la feature jobs
   migration  Écrit une migration d'évolution : des colonnes de plus sur une table existante
@@ -92,7 +92,7 @@ Options :
 {/* rbs:transcript cmd="rbs generate feature --help" */}
 ```text
 $ rbs generate feature --help
-Génère une feature vide : six fichiers, aucun champ
+Génère une feature vide, sans champ ni migration
 
 Utilisation : rbs generate feature [OPTIONS] <NAME>
 
@@ -151,7 +151,7 @@ nomme la commande qui installe ce qui manque. Un projet qui a reçu l'une ou l'a
 pas : la commande le refuse aussi, en nommant le déplacement à faire à la main. Sur un
 projet qui porte `jobs` :
 
-{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs generate job purge_sessions --dry-run
 plan pour …/demo
@@ -169,6 +169,7 @@ Deux ancres ici, toutes deux déposées par le fragment `jobs` et non par le squ
 projet qui porte aussi `scheduler`, `--every` ajoute un troisième fichier et une troisième
 ancre — `// <rbs:schedules>` pousse l'échéance du job dans le calendrier :
 
+{/* rbs:libre raison="la valeur de --every porte des espaces, que l'attribut cmd du rejeu ne sait pas citer" */}
 ```text
 $ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
 plan pour /private/tmp/rbs-demo/demo
@@ -257,7 +258,7 @@ La migration apprend la colonne à la base ; l'entité et ses DTO ont encore à 
 `model.rs` et `dto.rs` ne portent pas d'ancre, et le CLI ne réécrit pas d'AST — la commande
 affiche donc les lignes à coller, et n'en écrit aucune :
 
-{/* rbs:transcript cmd="rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields titre:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields titre:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="demo" extrait="oui" */}
 ```text
 $ rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run
 plan pour …/demo
@@ -338,6 +339,7 @@ restaure ce qu'il a touché.
 Un champ par virgule ; à l'intérieur d'un champ, les deux-points séparent un nom, un type,
 et autant de modificateurs qu'on veut :
 
+{/* rbs:libre raison="la grammaire de --fields, et non la sortie d'une commande" */}
 ```text
 nom:type[:modificateur…][,nom:type[:modificateur…]…]
 ```
@@ -401,6 +403,7 @@ d'une colonne ordonnée ; [Filtrage](../guides/filtering.md) en donne la table.
 Le onzième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
 autre entité plutôt que de lui donner un type propre.
 
+{/* rbs:libre raison="une valeur de --fields donnée en exemple, et non la sortie d'une commande" */}
 ```text
 author:references:users
 ```
@@ -480,8 +483,9 @@ toute autre retouche : ce code est fait pour être modifié.
 Toutes les fautes de la ligne sont collectées en une passe : la ligne se corrige d'un coup
 plutôt qu'une faute par exécution. Un champ qui en porte deux ne remonte que la première.
 
+{/* rbs:transcript cmd="rbs generate crud tags --fields Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int --dry-run" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
-$ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
+$ rbs generate crud tags --fields Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int --dry-run
 erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
@@ -497,8 +501,9 @@ erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
 Noter le rang du doublon : le champ 6 est signalé contre le champ 5, et le champ 5 lui-même
 est accepté.
 
+{/* rbs:transcript cmd="rbs generate crud tags --fields id:string,table:string,bio:text:optional:optional --dry-run" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
-$ rbs generate crud tags --fields "id:string,table:string,bio:text:optional:optional" --dry-run
+$ rbs generate crud tags --fields id:string,table:string,bio:text:optional:optional --dry-run
 erreur : champ 1 « id » — « id » ne se déclare pas
         → id, created_at et updated_at sont posés sur toute entité
 erreur : champ 2 « table » — « table » entrerait en collision avec l'identifiant de la table dans la migration
@@ -509,8 +514,9 @@ erreur : champ 3 « bio » — modificateur « optional » en double
 Un champ sans type — ou un séparateur en trop, comme une virgule finale ou `email:string:` —
 est une faute de forme, et non un type inconnu :
 
+{/* rbs:transcript cmd="rbs generate crud tags --fields titre --dry-run" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
-$ rbs generate crud tags --fields "titre" --dry-run
+$ rbs generate crud tags --fields titre --dry-run
 erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] »
         → exemple : « email:string:unique »
 ```
@@ -520,9 +526,10 @@ erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] 
 Chaque exécution affiche son plan avant d'écrire quoi que ce soit : ce que la commande
 s'apprête à faire ne doit pas se découvrir après coup. `--dry-run` s'arrête là.
 
+{/* rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,slug:string:unique,published:bool,views:int:optional --dry-run" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
-$ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional" --dry-run
-plan pour /private/tmp/rbs-demo/blog
+$ rbs generate crud articles --fields title:string,body:text,slug:string:unique,published:bool,views:int:optional --dry-run
+plan pour …/blog
 
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
@@ -536,7 +543,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/tests/errors.rs                        créé
   + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260830_110925_create_articles.rs   créé
+  + migration/src/m20260922_082250_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
@@ -552,9 +559,10 @@ plan pour /private/tmp/rbs-demo/blog
 
 La même commande sans `--dry-run` affiche le même plan, puis l'applique :
 
+{/* rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,slug:string:unique,published:bool,views:int:optional" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
-$ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional"
-plan pour /private/tmp/rbs-demo/blog
+$ rbs generate crud articles --fields title:string,body:text,slug:string:unique,published:bool,views:int:optional
+plan pour …/blog
 
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
@@ -568,7 +576,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/tests/errors.rs                        créé
   + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260830_110925_create_articles.rs   créé
+  + migration/src/m20260922_082251_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
@@ -580,30 +588,34 @@ plan pour /private/tmp/rbs-demo/blog
   13 à créer, 7 à modifier
 ✓ articles générée — 13 créés, 7 modifiés
 
-  la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
+  la migration m20260922_082251_create_articles reste à appliquer avant de lancer le projet
 ```
 
 Treize fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
 manifeste, ce qui rend la commande idempotente :
 
+{/* rbs:transcript cmd="grep -A4 package.metadata.rbs Cargo.toml" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields title:string,body:text,slug:string:unique,published:bool,views:int:optional" dans="blog" */}
 ```text
 [package.metadata.rbs]
-version = "1.2.0"
+version = "1.8.1"
 features = ["health", "articles"]
 database = "postgres"
+lang = "fr"
 ```
 
 Les marques du plan se lisent : `+` créé, `~` modifié, `·` inchangé, `!` en conflit.
 
-`rbs generate feature` écrit six fichiers et aucune migration :
+`rbs generate feature` écrit sept fichiers et aucune migration :
 
+{/* rbs:transcript cmd="rbs generate feature comments --force" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs generate feature comments --force
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
   + src/comments/mod.rs          créé
   + src/comments/model.rs        créé
   + src/comments/dto.rs          créé
+  + src/comments/filter.rs       créé
   + src/comments/repository.rs   créé
   + src/comments/service.rs      créé
   + src/comments/controller.rs   créé
@@ -613,8 +625,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                   modifié
   ~ AGENTS.md                    modifié
 
-  6 à créer, 5 à modifier
-✓ comments générée — 6 créés, 5 modifiés
+  7 à créer, 5 à modifier
+✓ comments générée — 7 créés, 5 modifiés
 ```
 
 ## Un working tree sale
@@ -623,9 +635,10 @@ Les fichiers générés sont neufs, mais les insertions modifient des fichiers q
 déjà. `rbs generate` refuse donc de passer sur des changements non commités — y compris
 sous `--dry-run`, le contrôle ayant lieu pendant la planification :
 
+{/* rbs:transcript cmd="rbs generate feature comments" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate feature notes --force" dans="blog" */}
 ```text
 $ rbs generate feature comments
-erreur : le working tree n'est pas propre : Cargo.toml, src/lib.rs, src/openapi.rs, src/router.rs — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : AGENTS.md, Cargo.toml, src/lib.rs, src/openapi.rs, src/router.rs — commitez, ou relancez avec --force
 ```
 
 Les fichiers non suivis ne comptent pas : ce sont précisément ceux que la commande
@@ -635,7 +648,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt-deux —
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six —
 les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
 fragments qu'installe [`rbs add`](./add.md) :
 
@@ -685,6 +698,7 @@ toucher.
 Retirez-en une et la commande n'écrit rien du tout — pas même les fichiers de la feature —
 et affiche le bloc à recoller :
 
+{/* rbs:libre raison="exige de retirer à la main une ancre de src/router.rs, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs generate feature notes --force
 erreur : ancre // <rbs:routes> introuvable dans src/router.rs
@@ -694,22 +708,22 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les vingt-deux ancres — quatorze sur un projet qui ne
-porte ni file, ni calendrier, ni authentification, ni client, ni shell d'administration, onze
-des vingt-deux étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une
+[`rbs doctor`](./doctor.md) contrôle toutes les ancres, si bien qu'une ancre disparue se trouve avant qu'une
 génération ne bute dessus.
 
 ## Les échecs
 
 Une feature déjà là est refusée plutôt que fusionnée :
 
+{/* rbs:transcript cmd="rbs generate crud articles --fields title:string" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields title:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="blog" */}
 ```text
-$ rbs generate crud articles --fields "title:string"
+$ rbs generate crud articles --fields title:string
 erreur : src/articles existe déjà : la feature `articles` est déjà là
 ```
 
 Hors d'un projet :
 
+{/* rbs:transcript cmd="rbs generate crud users --dry-run" */}
 ```text
 $ rbs generate crud users --dry-run
 erreur : aucun projet rbs ici : `rbs generate` s'exécute dans un projet créé par `rbs new`

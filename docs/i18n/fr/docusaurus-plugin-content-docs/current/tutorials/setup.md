@@ -5,7 +5,7 @@ title: Préparer le terrain
 
 # Préparer le terrain
 
-C'est le premier des neuf tutoriels, et celui que chaque page suivante suppose déjà
+C'est le premier tutoriel, et celui que chaque page suivante suppose déjà
 lu : il mène d'un répertoire vide à un projet nommé `demo`, en cours d'exécution, avec
 un contrôle de santé qui répond sur `localhost:8080`. Chaque tutoriel qui suit — CRUD,
 authentification, stockage, mail, cache, tâches de fond, observabilité, client
@@ -53,6 +53,7 @@ cd demo
 docker compose up -d --wait
 ```
 
+{/* rbs:libre raison="sortie de docker compose, qui démarre un conteneur : hors de portée du rejeu" */}
 ```text
  Container demo-db-1  Started
  Container demo-db-1  Waiting
@@ -70,6 +71,7 @@ immédiatement.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 ✓ migrations appliquées
 ```
@@ -84,6 +86,7 @@ est la bonne, avant que quoi que ce soit d'autre dans le projet n'en dépende.
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -102,6 +105,7 @@ Depuis un second terminal :
 curl -i http://127.0.0.1:8080/health
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json

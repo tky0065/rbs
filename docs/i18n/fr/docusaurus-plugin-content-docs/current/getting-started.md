@@ -5,8 +5,8 @@ title: Démarrage rapide
 
 # Démarrage rapide
 
-Cette page mène d'un répertoire vide à une API CRUD qui répond sur `localhost:8080`, en
-huit commandes. Chaque bloc de sortie ci-dessous a été recopié d'une exécution réelle —
+Cette page mène d'un répertoire vide à une API CRUD qui répond sur `localhost:8080`.
+Chaque bloc de sortie ci-dessous a été recopié d'une exécution réelle —
 si votre terminal affiche la même chose, vous n'avez pas dévié — aux durées, aux
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
@@ -55,8 +55,9 @@ Dans les deux cas, un exécutable `rbs` atterrit dans `~/.cargo/bin`, accompagn�
 rbs --version
 ```
 
+{/* rbs:transcript cmd="rbs --version" */}
 ```text
-rbs 1.2.0
+rbs 1.8.1
 ```
 
 :::note
@@ -102,6 +103,7 @@ manque, puis les features optionnelles à installer. Il refuse aussi de tourner 
 terminal où poser ses questions : c'est pourquoi un script ou un job de CI a besoin de
 `--yes` :
 
+{/* rbs:transcript cmd="rbs new demo" */}
 ```text
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
@@ -130,6 +132,7 @@ Vingt-trois fichiers, et aucun n'est une boîte noire :
 
 Le `.env` écrit par la commande porte l'URL que vous avez passée :
 
+{/* rbs:libre raison="contenu du .env qu'écrit rbs new, non la sortie d'une commande" */}
 ```text
 RBS_ENV=development
 RBS_DATABASE__URL=postgres://rbs:secret@localhost:5432/demo
@@ -187,6 +190,7 @@ volumes:
 docker compose up -d --wait
 ```
 
+{/* rbs:libre raison="sortie de docker compose, qui démarre un conteneur : hors de portée du rejeu" */}
 ```text
  Network demo_default  Creating
  Network demo_default  Created
@@ -218,6 +222,7 @@ rbs migrate up
 La première exécution compile la crate `migration`, ce qui prend une minute ; ce sont
 les dernières lignes qui comptent :
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.48s
@@ -285,6 +290,7 @@ rbs migrate up
 rbs migrate status
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.02s
@@ -292,6 +298,7 @@ rbs migrate status
 ✓ migrations appliquées
 ```
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool && rbs migrate up" dans="demo" base="oui" */}
 ```text
   ✓ m20260829_100554_create_articles   appliquée
 ```
@@ -321,6 +328,7 @@ cargo run
 La première compilation est longue — c'est tout l'arbre Axum, SeaORM et utoipa. Une fois
 terminée :
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -337,6 +345,7 @@ Laissez le serveur tourner et ouvrez un second terminal.
 curl -i http://127.0.0.1:8080/health
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
@@ -364,6 +373,7 @@ curl -i -X POST http://127.0.0.1:8080/articles \
   -d '{"title":"Premier article","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 201 Created
 content-type: application/json
@@ -381,6 +391,7 @@ ne font pas partie du corps de la requête.
 curl http://127.0.0.1:8080/articles
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 ```
@@ -391,6 +402,7 @@ s'y déplacent. Les trois routes restantes — `GET`, `PATCH` et `DELETE` sur
 
 Pendant ce temps, le terminal du serveur affiche une ligne par requête :
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
 10:06:30  INFO   rbs_core::trace     request  status=201 latency_ms=4.517125 request_id=01M16FRBHQDCDV859ADGK8ZMJG method=POST path=/articles
@@ -433,8 +445,8 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Sept vérifications : les ancres sont toujours en place — douze ici, onze du squelette
-plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml`
+Les vérifications : les ancres sont toujours en place — celles du squelette plus celle
+du compose, qui sort du compte pour un projet sans `docker-compose.yml`
 (`modules`, `jobs`, `job_modules` et `schedules` en sortent aussi, sur un projet qui n'a
 jamais installé de fragment) — le guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec
 ce que porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui

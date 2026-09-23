@@ -5,7 +5,7 @@ title: Sortir le travail long de la requête
 
 # Sortir le travail long de la requête
 
-C'est le septième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+C'est le septième tutoriel. Il reprend `demo` ; cette page n'a besoin de rien
 au-delà de [Préparer le terrain](./setup.md). Le cas : une campagne de 5 000 lettres,
 enfilées sans faire attendre l'appelant qu'une seule parte.
 
@@ -21,7 +21,7 @@ rien ici n'exige que le serveur tourne.
 rbs add jobs
 ```
 
-{/* rbs:transcript cmd="rbs add jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add jobs
 jobs : jobs en arrière-plan : une table, un enfilage transactionnel, un worker qui réessaie
@@ -78,6 +78,7 @@ git add -A && git commit -q -m "jobs installée"
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add jobs && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 34.51s
@@ -100,6 +101,7 @@ qu'il exige la table qui vient d'être migrée :
 cargo test modules::jobs::tests:: -- --ignored
 ```
 
+{/* rbs:libre raison="cargo lance les tests en parallèle : l'ordre de leurs lignes change d'un rejeu à l'autre" */}
 ```text
 running 4 tests
 test modules::jobs::tests::reservation::a_job_enqueued_in_a_rolled_back_transaction_does_not_exist ... ok
@@ -166,7 +168,7 @@ perdre ou dupliquer, en bloc.
 
 - [Jobs](../guides/jobs.md) couvre en entier le scrutage et le réessai du worker, et
   comment programmer un job pour plus tard avec `enqueue_at`.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que `demo` pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait
   encore installer, `jobs` désormais dessus.
 - [Tests](../guides/testing.md) est le harnais contre lequel `jobs/tests/` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.

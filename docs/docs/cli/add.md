@@ -1,11 +1,12 @@
 ---
 sidebar_position: 3
 title: rbs add
+description: Installs a feature into an existing project.
 ---
 
 # `rbs add`
 
-Installs a feature into an existing project. Sixteen are shipped: `api-keys`, `audit`,
+Installs a feature into an existing project. {/* rbs:chiffre fragments */}Sixteen are shipped: `api-keys`, `audit`,
 `auth`, `ci`, `cors`, `docker`, `frontend`, `frontend-admin`, `jobs`, `mail`,
 `observability`, `rate-limit`, `redis`, `scheduler`, `storage` and `webhooks`.
 
@@ -16,6 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs add --help" */}
 ```text
 $ rbs add --help
 Ajoute une feature : api-keys, audit, auth, ci, cors, docker, frontend, frontend-admin, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
@@ -41,26 +43,26 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text: every action with its effect, the full content of created files, and `applique` to say whether anything was written. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The sixteen features
+## The features
 
 | Feature | Files | Next step |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, its actions pinned by SHA, and `.github/dependabot.yml`, which proposes their updates every week | `git push` |
-| `auth` | thirty-five files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
-| `api-keys` | nine files under `src/modules/api_keys/`, one migration, four routes, and a method inserted into the `impl HasAuth` that `auth` deposits — and `auth`, which it requires | `rbs migrate up`, then `POST /api-keys` |
-| `jobs` | thirteen files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
-| `scheduler` | nine files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
-| `redis` | three files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
-| `mail` | five files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
-| `storage` | six files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
-| `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
-| `frontend` | four files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `rbs generate client --lang ts` **before** `npm run build`: the base imports the generated client. Then `cargo run`: the root serves the bootstrap page, which names what is left to build |
-| `frontend-admin` | nineteen files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, the authorization header it lays over the base's API client, four account-and-health screens, the four public pages that lead to them and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | nothing of its own: the base's steps cover the client. [The frontend guide](../guides/frontend.md) has the rest |
-| `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
-| `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
-| `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
-| `webhooks` | sixteen files under `src/modules/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
+| `auth` | files under `src/auth/`, three mail templates, one migration, edits to project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
+| `api-keys` | files under `src/modules/api_keys/`, one migration, four routes, and a method inserted into the `impl HasAuth` that `auth` deposits — and `auth`, which it requires | `rbs migrate up`, then `POST /api-keys` |
+| `jobs` | files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
+| `scheduler` | files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
+| `redis` | files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
+| `mail` | files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
+| `storage` | files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
+| `cors` | files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
+| `frontend` | files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `rbs generate client --lang ts` **before** `npm run build`: the base imports the generated client. Then `cargo run`: the root serves the bootstrap page, which names what is left to build |
+| `frontend-admin` | files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, the authorization header it lays over the base's API client, four account-and-health screens, the four public pages that lead to them and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | nothing of its own: the base's steps cover the client. [The frontend guide](../guides/frontend.md) has the rest |
+| `rate-limit` | files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
+| `observability` | files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
+| `audit` | files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
+| `webhooks` | files under `src/modules/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
 
 `cors`, `rate-limit` and `observability` are the three that stack a middleware rather
 than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
@@ -74,22 +76,24 @@ A project generated by `rbs new` already has a `docker-compose.yml`: `docker` wr
 `Dockerfile` and `.dockerignore`, and inserts its two services — `api`, `migrate` — into
 the compose's `# <rbs:services>` anchor, under the `app` profile:
 
+{/* rbs:transcript cmd="rbs add docker" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add docker
 docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
   + Dockerfile           créé
   + .dockerignore        créé
   ~ docker-compose.yml   modifié
+  ~ Makefile             modifié
   · .env.example         inchangé
   · .env                 inchangé
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  2 à créer, 3 à modifier, 2 inchangés
-✓ docker installée — 2 créés, 3 modifiés
+  2 à créer, 4 à modifier, 2 inchangés
+✓ docker installée — 2 créés, 4 modifiés
 
   docker compose --profile app up --build
 ```
@@ -111,22 +115,22 @@ the one `EXPOSE` declares; move one and you move the other. Kubernetes ignores a
 A project with no compose to insert into — SQLite, or created before rbs 1.1.0 — gets a
 whole one instead:
 
+{/* rbs:transcript cmd="rbs add docker" setup="rbs new depot --yes --lang fr --database sqlite && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="depot" */}
 ```text
 $ rbs add docker
 docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + Dockerfile           créé
   + .dockerignore        créé
   + docker-compose.yml   créé
-  ~ .env.example         modifié
-  ~ .env                 modifié
+  ~ Makefile             modifié
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  3 à créer, 4 à modifier
-✓ docker installée — 3 créés, 4 modifiés
+  3 à créer, 3 à modifier
+✓ docker installée — 3 créés, 3 modifiés
 
   docker compose --profile app up --build
 ```
@@ -143,6 +147,7 @@ has already equipped.
 A compose edited by hand that has lost its `# <rbs:services>` anchor is not touched — the
 command writes nothing and prints the block to paste back:
 
+{/* rbs:libre raison="exige de retirer à la main l'ancre de docker-compose.yml, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs add docker
 erreur : ancre # <rbs:services> introuvable dans docker-compose.yml
@@ -152,11 +157,12 @@ dans docker-compose.yml :
 # </rbs:services>
 ```
 
+{/* rbs:transcript cmd="rbs add ci" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add ci
 ci : workflow GitHub Actions : fmt, clippy et tests sur PostgreSQL
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
   + .github/workflows/ci.yml   créé
   + .github/dependabot.yml     créé
@@ -169,11 +175,12 @@ plan pour /private/tmp/rbs-demo/blog
   git push : le workflow s'exécute à la prochaine poussée
 ```
 
+{/* rbs:transcript cmd="rbs add cors" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add cors
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
   + src/modules/cors/mod.rs      créé
   + src/modules/cors/config.rs   créé
@@ -197,11 +204,12 @@ is refused alongside `credentials = true` — a browser ignores credentials sent
 wildcard origin, and believing otherwise is the real danger. A section that cannot be read
 yields a layer that allows nothing, and says so in the log.
 
+{/* rbs:transcript cmd="rbs add rate-limit" setup="rbs new depot --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/depot && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="depot" */}
 ```text
 $ rbs add rate-limit
 rate-limit : limite de débit : un compteur par adresse cliente, plus strict sur les routes qui coûtent cher
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/rate_limit/mod.rs       créé
   + src/modules/rate_limit/config.rs    créé
@@ -240,13 +248,32 @@ element of `X-Forwarded-For`, the one the proxy appends: nginx, Traefik, Caddy a
 all add the peer's address at the end of the list without touching what precedes it, so
 whatever the client wrote ahead of it does not change the counter it is charged to.
 
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
 auth exige mail, rate-limit : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/blog
 
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ src/lib.rs                                             modifié
+  ~ src/state.rs                                           modifié
+  ~ docker-compose.yml                                     modifié
+  ~ Cargo.toml                                             modifié
+  ~ config/default.toml                                    modifié
+  ~ .env.example                                           modifié
+  + src/modules/rate_limit/mod.rs                          créé
+  + src/modules/rate_limit/config.rs                       créé
+  + src/modules/rate_limit/counter.rs                      créé
+  + src/modules/rate_limit/tests.rs                        créé
+  ~ src/router.rs                                          modifié
   + src/auth/mod.rs                                        créé
   + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
@@ -257,17 +284,21 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/repository/one_time_token.rs                  créé
   + src/auth/service/mod.rs                                créé
   + src/auth/service/session.rs                            créé
+  + src/auth/service/account.rs                            créé
   + src/auth/service/password.rs                           créé
   + src/auth/service/verification.rs                       créé
   + src/auth/controller/mod.rs                             créé
   + src/auth/controller/session.rs                         créé
+  + src/auth/controller/account.rs                         créé
   + src/auth/controller/password.rs                        créé
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
+  + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/account.rs                              créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
   + src/auth/tests/http.rs                                 créé
@@ -282,34 +313,20 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
-  + migration/src/m20260910_171229_create_auth_tables.rs   créé
+  + migration/src/m20260922_082350_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/lib.rs                                             modifié
-  ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
-  ~ src/state.rs                                           modifié
-  ~ Cargo.toml                                             modifié
-  ~ config/default.toml                                    modifié
-  ~ .env.example                                           modifié
+  ~ src/seeds/main.rs                                      modifié
+  ~ config/development.toml                                modifié
   ~ .env                                                   modifié
-  + src/modules/mail/mod.rs                                créé
-  + src/modules/mail/config.rs                             créé
-  + src/modules/mail/template.rs                           créé
-  + src/modules/mail/service.rs                            créé
-  + src/modules/mail/tests.rs                              créé
-  + templates/mail/bienvenue.html                          créé
-  + src/modules/mod.rs                                     créé
-  ~ docker-compose.yml                                     modifié
-  + src/modules/rate_limit/mod.rs                          créé
-  + src/modules/rate_limit/config.rs                       créé
-  + src/modules/rate_limit/counter.rs                      créé
-  + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  47 à créer, 11 à modifier
-✓ auth installée — 47 créés, 11 modifiés
+  51 à créer, 13 à modifier
+✓ auth installée — 51 créés, 13 modifiés
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@blog.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 ```
 
 `auth` is one of the two fragments that require another —
@@ -333,15 +350,18 @@ left to copy, and the migration is the only step remaining. The
 
 In each plan the `Cargo.toml` line is where the installation is recorded:
 
+{/* rbs:transcript cmd="grep -A4 package.metadata.rbs Cargo.toml" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker --force && rbs add ci --force && rbs add auth --force" dans="blog" */}
 ```text
 [package.metadata.rbs]
-version = "1.0.0"
-features = ["health", "docker", "ci", "auth", "mail", "rate-limit"]
+version = "1.8.1"
+features = ["health", "docker", "ci", "mail", "rate-limit", "auth"]
 database = "postgres"
+lang = "fr"
 ```
 
 Anything else is refused with the list of what is installable:
 
+{/* rbs:transcript cmd="rbs add graphql" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add graphql
 erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, frontend, frontend-admin, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
@@ -353,6 +373,7 @@ Installing something already installed is not a failure. The manifest is what th
 reads: a feature listed in `[package.metadata.rbs]` short-circuits before a plan is even
 drawn.
 
+{/* rbs:transcript cmd="rbs add docker" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker" dans="blog" */}
 ```text
 $ rbs add docker
 ✓ docker est déjà installée — rien à faire
@@ -362,6 +383,7 @@ Idempotence rests on those metadata, not on the presence of the files. Remove th
 from the manifest and the files are still there — the plan reports them unchanged, and
 writes back only the manifest line that went missing:
 
+{/* rbs:libre raison="exige de retirer à la main la ligne de la feature du manifeste, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs add docker
 docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
@@ -386,9 +408,10 @@ Markers in the plan read: `+` created, `~` modified, `·` unchanged, `!` conflic
 
 `rbs add` edits `Cargo.toml`, so it refuses to run over uncommitted changes:
 
+{/* rbs:transcript cmd="rbs add ci" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker" dans="blog" */}
 ```text
 $ rbs add ci
-erreur : le working tree n'est pas propre : Cargo.toml — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : AGENTS.md, Cargo.toml, Makefile, docker-compose.yml — commitez, ou relancez avec --force
 ```
 
 Untracked files are not counted: they are exactly what the command is about to create. Past
@@ -400,6 +423,7 @@ suggests.
 A file that exists with content the fragment does not match is neither merged nor silently
 overwritten. The plan marks it `!`, and the command stops:
 
+{/* rbs:libre raison="exige un catalogue de fragments préparé à la main, dont un docker au Dockerfile réduit" */}
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features
 docker : Dockerfile minimal, pour l'exemple
@@ -419,6 +443,7 @@ feature's line there is a real change — the plan runs before anything fails, a
 conflict is what stops it from being applied. `--force` overwrites, having shown the same
 plan first:
 
+{/* rbs:libre raison="exige le même catalogue préparé à la main, et enchaîne deux commandes" */}
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features --force
 docker : Dockerfile minimal, pour l'exemple
@@ -448,6 +473,7 @@ install leaves no half-installed feature behind.
 It replaces the embedded catalogue rather than adding to it, so a directory that does not
 hold the requested feature is a directory where no feature exists:
 
+{/* rbs:transcript cmd="rbs add docker --template-dir /nexistepas" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/blog && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="blog" */}
 ```text
 $ rbs add docker --template-dir /nexistepas
 erreur : `docker` n'est pas une feature installable : aucune n'est disponible
@@ -459,7 +485,7 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's sixteen Rust comment
+generate`](./generate.md#anchors) that inserts into the project's Rust comment
 anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
 library — see [below](./generate.md#anchors)), `// <rbs:modules>` (optional: only a
 project that has installed a fragment under `src/modules/` has it), `// <rbs:routes>`,
@@ -480,7 +506,7 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
+[above](#the-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
 drops in it, and `# <rbs:make>` in the `Makefile`, where a fragment that brings one more
 executable to run adds its shortcut; both are optional too, a project whose owner deleted
@@ -490,7 +516,7 @@ the `.gitignore` or the `Makefile` being no less complete for it. Three more sit
 TypeScript — all three filled by [`rbs generate crud`](./generate.md#anchors), and the
 [frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twenty-two — fourteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being optional.
+[`rbs doctor`](./doctor.md) checks them all.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches
@@ -508,6 +534,7 @@ put in it. No other fragment reads `config` there, and none is refused on such a
 
 Outside a project:
 
+{/* rbs:transcript cmd="rbs add docker" */}
 ```text
 $ rbs add docker
 erreur : aucun projet rbs ici : `rbs add` s'exécute dans un projet créé par `rbs new`

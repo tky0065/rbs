@@ -15,6 +15,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs routes --help" */}
 ```text
 $ rbs routes --help
 Liste les routes du projet : méthode, chemin, operation_id et garde
@@ -32,6 +33,7 @@ Options :
 
 On a project created with `rbs new routes-api --with auth`:
 
+{/* rbs:libre raison="compile un projet entier portant auth, plusieurs minutes à froid : trop long pour la passe rapide du rejeu" */}
 ```text
 $ rbs routes
 MÉTHODE  CHEMIN                     OPERATION_ID              GARDE
@@ -40,8 +42,10 @@ POST     /auth/forgot-password      auth_forgot_password      public
 POST     /auth/login                auth_login                public
 POST     /auth/logout               auth_logout               public
 GET      /auth/me                   auth_me                   bearer
+PATCH    /auth/me                   auth_update_me            bearer
 POST     /auth/refresh              auth_refresh              public
 POST     /auth/register             auth_register             public
+GET      /auth/registration         auth_registration_status  public
 POST     /auth/resend-verification  auth_resend_verification  public
 POST     /auth/reset-password       auth_reset_password       public
 GET      /auth/sessions             auth_list_sessions        bearer
@@ -68,6 +72,7 @@ An array of objects with four keys, always present — `operation_id` is `null` 
 operation has none. It is the only thing on standard output: the project's compilation
 goes to standard error.
 
+{/* rbs:libre raison="compile le même projet portant auth, et le bloc élide la suite du tableau" */}
 ```text
 $ rbs routes --json
 [

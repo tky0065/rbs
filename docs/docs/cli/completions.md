@@ -23,6 +23,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs completions --help" */}
 ```text
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
@@ -104,11 +105,12 @@ is what `--template-dir` exists for — so the parser keeps no such list, and on
 accepts would be worse than no completion at all.
 
 Fish and PowerShell are the two shells whose generator stops short of the values of a
-positional argument: there, `rbs add ` completes the flags but not the fifteen names. That is
+positional argument: there, `rbs add ` completes the flags but not the feature names. That is
 a limit of the generator, not of the declaration.
 
 ## An unknown shell
 
+{/* rbs:transcript cmd="rbs completions nushell" */}
 ```text
 $ rbs completions nushell
 erreur : valeur « nushell » invalide pour « <SHELL> »

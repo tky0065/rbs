@@ -16,6 +16,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs test --help" */}
 ```text
 $ rbs test --help
 Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace
@@ -46,6 +47,7 @@ Like [`rbs dev`](./dev.md), `rbs test` shows what it is about to do before doing
 first three steps are `rbs dev`'s — the same code plans them — and the server is replaced
 by the tests:
 
+{/* rbs:transcript cmd="rbs test --no-compose articles -- --nocapture" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
   base        127.0.0.1:1
   migrations  rbs migrate up
@@ -81,6 +83,7 @@ that chains `rbs test` can therefore tell a red test apart from a command that c
 start, whose code is 1, 2 or 3 depending on what stopped it — see
 [exit codes](./doctor.md#exit-codes). A red test ends on:
 
+{/* rbs:libre raison="exige un test rouge, donc une base démarrée et la compilation entière du projet" */}
 ```text
 erreur : `cargo test` a échoué (code 101)
 ```
@@ -90,6 +93,7 @@ erreur : `cargo test` a échoué (code 101)
 Everything before the tests fails the way [`rbs dev`](./dev.md#failures) does, with the
 same messages:
 
+{/* rbs:transcript cmd="rbs test --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 en attente de la base (127.0.0.1:1) ...
 erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée

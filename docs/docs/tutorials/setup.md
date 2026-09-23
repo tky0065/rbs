@@ -5,7 +5,7 @@ title: Setting up
 
 # Setting up
 
-This is the first of nine tutorials, and the one every page after it assumes you have
+This is the first tutorial, and the one every page after it assumes you have
 already been through: it takes an empty directory to a project named `demo`, running,
 with a health check answering on `localhost:8080`. Each tutorial that follows — CRUD,
 auth, storage, mail, cache, background jobs, observability, a generated TypeScript
@@ -52,6 +52,7 @@ cd demo
 docker compose up -d --wait
 ```
 
+{/* rbs:libre raison="sortie de docker compose, qui démarre un conteneur : hors de portée du rejeu" */}
 ```text
  Container demo-db-1  Started
  Container demo-db-1  Waiting
@@ -68,6 +69,7 @@ That is what makes the next command safe to run immediately.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 ✓ migrations appliquées
 ```
@@ -82,6 +84,7 @@ anything else in the project depends on it.
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -99,6 +102,7 @@ From a second terminal:
 curl -i http://127.0.0.1:8080/health
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json

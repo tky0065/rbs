@@ -15,6 +15,16 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs new` sans `--yes` ne se bloque plus dans un script sous Windows.** Sans terminal
+  où poser ses questions, il attendait indéfiniment une touche sur la console. Il refuse
+  désormais aussitôt, comme ailleurs, et dit de passer `--yes` ou les réponses en flags. Sur
+  toutes les plateformes, un `rbs new` dont l'entrée standard est redirigée ne pose plus ses
+  questions non plus, même avec un terminal à portée.
+
+- **`rbs new --core-path` écrit un chemin ordinaire sous Windows.** Le manifeste portait
+  la forme `\\?\D:\…` que `canonicalize` y rend ; il porte désormais `D:\…`, tel qu'on
+  l'écrirait. Un chemin UNC garde sa forme.
+
 - **`make help` n'affiche plus `â€”` sous Windows.** Le bandeau du `Makefile` engendré
   portait un tiret cadratin dans la recette elle-même, où ses trois octets arrivaient relus
   un à un ; les descriptions des raccourcis, qu'`awk` lit dans le fichier, ne l'ont jamais
@@ -22,6 +32,24 @@ dépréciation.
   l'ASCII.
   Un projet engendré avant garde son `Makefile`, qui appartient à son auteur : remplacer
   `—` par `-` sur la ligne de `help` suffit à recevoir le correctif.
+- **`rbs generate --help` ne compte plus les fichiers d'une feature vide.** L'aide de
+  `generate feature` en annonçait six quand la commande en écrit sept depuis `filter.rs` ;
+  elle dit désormais ce qui manque à une feature vide — ses champs et sa migration — plutôt
+  qu'un nombre que la prochaine couche démentirait.
+- **Deux migrations créées dans la même seconde ne s'ordonnent plus au hasard.** Leurs noms
+  portaient le même horodatage, et `migrations()` les triait alors par nom de table plutôt
+  que par ordre de création — une clé étrangère pouvait passer avant la table qu'elle vise.
+  `rbs generate crud`, `rbs generate migration`, `rbs migrate new` et `rbs add` datent
+  désormais une migration neuve de la seconde qui suit la plus récente de `migration/src/`,
+  tant que l'horloge ne l'a pas dépassée.
+
+- **`rbs doctor` ne fait plus échouer un projet qui sort de `rbs new --with mail`.** Le
+  contrôle `.env` exigeait dans `.env` chaque clé de `.env.example`, y compris
+  `RBS_MAIL__SMTP_PASSWORD`, que le fragment `mail` — et `auth`, qui l'installe — déclare
+  vide dans l'exemple seul. Une clé que `.env.example` laisse vide (`CLE=`, `CLE=""`, ou
+  `CLE=` suivi d'un commentaire) peut désormais manquer : le contrôle la nomme et la compte
+  à part, sans échouer, et le contrôle `mail` lit le mot de passe absent comme un mot de
+  passe vide. Une clé à laquelle l'exemple donne une valeur reste exigée.
 
 ## [1.8.1] — 2026-09-20
 

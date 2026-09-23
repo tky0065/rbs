@@ -375,7 +375,7 @@ A route your project adds is declared there too, failing which it will only answ
 build is in place. `rbs generate crud` writes its own into the `// <rbs:vite_proxy>` anchor
 — `'/articles',` for a table named `articles` — so a generated screen works under `npm run
 dev` without a line to add by hand; a route you write yourself goes beside it, by hand. The
-proxy is also why the default setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-sixteen-features) is for the
+proxy is also why the default setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-features) is for the
 case where the client is served from *another* origin, which `admin-console` carries so the
 configuration is on show.
 
