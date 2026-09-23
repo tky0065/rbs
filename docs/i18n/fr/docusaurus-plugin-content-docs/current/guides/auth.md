@@ -601,7 +601,10 @@ handler ci-dessus dans `src/auth/controller/account.rs` ; la ligne
 et `crate::auth::controller::account::filter_users` parmi les chemins de `src/openapi.rs`.
 L'écran résout les libellés par `in` : le `rbs-core` du projet doit donc être en 1.10.0 au
 moins, ce dont `rbs upgrade` se charge. Régénérez ensuite le client typé, et les écrans dont
-la référence s'est repliée, avec `--force`.
+la référence s'est repliée, avec `--force`. Sur un projet qui porte la feature `frontend`,
+ajoutez aussi `'/users'` à côté de `'/auth'` dans le `RELAYE.push(...)` de
+`frontend/vite.config.ts` : sans lui, sous `npm run dev`, l'appel du sélecteur part vers le
+port de Vite et non vers le binaire.
 
 ## Tester une route protégée
 

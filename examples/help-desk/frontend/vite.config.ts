@@ -24,12 +24,13 @@ const RELAYE = [
 
 // Le shell d'administration appelle les routes d'`auth` ; sans ce relais, sa connexion
 // partirait sur le port de Vite, qui rendrait l'application en guise de paire de jetons.
+// `/users` porte la liste des comptes que le sélecteur de références interroge.
 //
 // La présence du répertoire plutôt qu'une ligne écrite à la pose : le fragment du shell
 // arrive peut-être après ce fichier-ci, et il ne peut pas le redéposer. Le routeur
 // découvre son montage de la même façon, et le retrait du fragment efface les deux.
 if (existsSync(fileURLToPath(new URL('./src/admin', import.meta.url)))) {
-  RELAYE.push('/auth')
+  RELAYE.push('/auth', '/users')
 }
 
 // Le port de `[server]` dans `config/default.toml`. Les deux se déplacent ensemble, et

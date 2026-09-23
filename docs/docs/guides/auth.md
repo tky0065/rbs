@@ -579,7 +579,9 @@ handler above in `src/auth/controller/account.rs`; the line
 and `crate::auth::controller::account::filter_users` among the paths of `src/openapi.rs`.
 The screen resolves labels with `in`, so the project's `rbs-core` must be 1.10.0 or later,
 which `rbs upgrade` takes care of. Then regenerate the typed client, and the screens whose
-reference fell back, with `--force`.
+reference fell back, with `--force`. On a project with the `frontend` feature, add `'/users'`
+next to `'/auth'` in the `RELAYE.push(...)` of `frontend/vite.config.ts` as well: without it,
+under `npm run dev`, the picker's call reaches Vite's port instead of the binary.
 
 ## Testing a protected route
 

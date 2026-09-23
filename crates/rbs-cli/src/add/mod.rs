@@ -4256,7 +4256,8 @@ mod tests {
     /// La connexion part vers la même origine que l'application. En développement, celle-ci
     /// est le port de Vite : sans relais, `POST /auth/login` rend l'index du client, avec
     /// un 200 et un corps que le client engendré lit comme une paire de jetons. Rien
-    /// n'échoue — l'opérateur entre, et ressort à la première requête.
+    /// n'échoue — l'opérateur entre, et ressort à la première requête. `POST /users/filter`,
+    /// que le sélecteur de références appelle, suit le même chemin.
     ///
     /// La condition porte sur le répertoire du shell, et non sur les features de la pose :
     /// le socle est peut-être posé des mois avant lui, et rendu une seule fois. Le chemin
@@ -4269,8 +4270,8 @@ mod tests {
 
         let vite = projected(&planned, "frontend/vite.config.ts");
         assert!(
-            vite.contains("RELAYE.push('/auth')"),
-            "les routes d'`auth` ne sont pas relayées :\n{vite}"
+            vite.contains("RELAYE.push('/auth', '/users')"),
+            "les routes d'`auth` — connexion et liste des comptes — ne sont pas relayées :\n{vite}"
         );
         assert!(
             vite.contains("existsSync(fileURLToPath(new URL('./src/admin'"),
