@@ -9,7 +9,7 @@ et SeaORM. Elle fait partie de [rbs](https://github.com/tky0065/rbs).
 
 ![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](https://raw.githubusercontent.com/tky0065/rbs/main/docs/static/img/enregistrement/admin.png)
 
-*Enregistré avec rbs 1.8.1 par
+*Enregistré avec rbs 1.9.0 par
 [`regenere.sh`](https://github.com/tky0065/rbs/blob/main/docs/scripts/enregistrement/regenere.sh),
 qui rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
 commandes — la base, les migrations et le seed, `npm install`, le client typé, la

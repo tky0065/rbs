@@ -4,7 +4,7 @@
 
 ![The tickets screen that rbs generate crud wrote into the admin space of the same project](docs/static/img/enregistrement/admin.png)
 
-*Recorded with rbs 1.8.1 by
+*Recorded with rbs 1.9.0 by
 [`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), which
 replays both parts and fails as soon as one command does. What runs between the commands —
 the database, migrations and seed, `npm install`, the typed client, the compilation, the

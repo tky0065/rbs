@@ -745,6 +745,44 @@ fn the_readmes_announce_the_version_of_the_workspace() {
     }
 }
 
+/// L'enregistrement des README dit la version qui l'a produit, et cette ligne est écrite à
+/// la main : rien ne la tenait, et elle aurait vieilli en silence sous une animation qui
+/// montre une sortie d'une autre version. La comparaison se fait sur la mineure, la
+/// régénération étant promise à chaque mineure et non à chaque correctif.
+#[test]
+fn the_recording_was_produced_by_this_minor_version() {
+    let racine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let version = env!("CARGO_PKG_VERSION");
+    let mineure: String = version.split('.').take(2).collect::<Vec<_>>().join(".");
+
+    for readme in [
+        "README.md",
+        "README.fr.md",
+        "crates/rbs-cli/README.md",
+        "crates/rbs-cli/README.fr.md",
+    ] {
+        let contenu = std::fs::read_to_string(racine.join(readme))
+            .unwrap_or_else(|erreur| panic!("{readme} illisible : {erreur}"));
+
+        let legende = contenu
+            .lines()
+            .find(|ligne| ligne.contains("rbs ") && ligne.starts_with('*'))
+            .unwrap_or_else(|| panic!("{readme} n'a pas de légende d'enregistrement"));
+
+        let citee = legende
+            .split("rbs ")
+            .nth(1)
+            .and_then(|reste| reste.split_whitespace().next())
+            .unwrap_or_else(|| panic!("{readme} : la légende ne cite aucune version"));
+
+        assert!(
+            citee.starts_with(&format!("{mineure}.")),
+            "{readme} : l'enregistrement dit rbs {citee}, le dépôt est en {version} — \
+             régénérez-le par docs/scripts/enregistrement/regenere.sh"
+        );
+    }
+}
+
 mod extraction {
     use super::*;
 

@@ -4,7 +4,7 @@
 
 ![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](docs/static/img/enregistrement/admin.png)
 
-*Enregistré avec rbs 1.8.1 par
+*Enregistré avec rbs 1.9.0 par
 [`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), qui
 rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
 commandes — la base, les migrations et le seed, `npm install`, le client typé, la
