@@ -28,6 +28,7 @@ use crate::state::AppState;
         crate::auth::controller::list_sessions,
         crate::auth::controller::revoke_session,
         crate::auth::controller::revoke_sessions,
+        crate::auth::controller::account::filter_users,
         crate::modules::webhooks::controller::subscribe,
         crate::modules::webhooks::controller::list,
         crate::modules::webhooks::controller::revoke,

@@ -22,6 +22,7 @@ mod reset;
 mod roles;
 mod sessions;
 mod tokens;
+mod users;
 mod verification;
 
 use http::*;

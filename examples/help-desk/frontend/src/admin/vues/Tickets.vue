@@ -5,6 +5,7 @@ import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from '@
 import { computed, ref, watch } from 'vue'
 
 import { api, phrase } from '@/api'
+import { courte, resoudre, type Entree } from '@/admin/references/libelles'
 import Bande from '@/components/Bande.vue'
 import { Button } from '@/components/ui/button'
 import {
@@ -211,13 +212,58 @@ function raison(cause: unknown, defaut: string): string {
 }
 
 /**
+ * Les tables que cet écran référence : comment en chercher les lignes par leur libellé, et
+ * comment en relire une page par identifiants.
+ */
+const REFERENCES = {
+  auteur_id: {
+    chercher: async (motif: string): Promise<Entree[]> =>
+      (
+        await api.usersFilter(
+          { email: motif === '' ? undefined : { contains: motif } },
+          { page: 1, per_page: 20 },
+        )
+      ).data.map((ligne) => ({ cle: ligne.id, libelle: ligne.email ?? courte(ligne.id) })),
+    lire: async (ids: string[]): Promise<Entree[]> =>
+      (
+        await api.usersFilter({ id: { in: ids } }, { page: 1, per_page: ids.length })
+      ).data.map((ligne) => ({ cle: ligne.id, libelle: ligne.email ?? courte(ligne.id) })),
+  },
+} as const
+
+/** Les libellés résolus, par colonne puis par identifiant. */
+const libelles = ref<Record<string, Map<string, string>>>({})
+
+/** Relit les libellés des lignes montrées, une requête par colonne référence. */
+async function nommer(montrees: readonly Ligne[]): Promise<void> {
+  for (const [cle, reference] of Object.entries(REFERENCES)) {
+    const ids = montrees.map((ligne) => ligne[cle as keyof Ligne] as string | null)
+    const nouvelles = await resoudre(reference.lire, ids)
+    // Fusionnés et non remplacés : relire la seule ligne du détail ne doit pas faire
+    // oublier les libellés du reste de la page.
+    libelles.value = {
+      ...libelles.value,
+      [cle]: new Map([...(libelles.value[cle] ?? []), ...nouvelles]),
+    }
+  }
+}
+
+/** Ce que l'opérateur lit d'une cellule : le libellé d'une référence, sinon la valeur. */
+function lisible(cle: keyof Ligne, valeur: string | number | boolean | null, rendu: Rendu): string {
+  if (rendu === 'reference' && typeof valeur === 'string') {
+    return libelles.value[cle]?.get(valeur) ?? courte(valeur)
+  }
+  return afficher(valeur, rendu)
+}
+
+/**
  * Comment une valeur se lit : telle quelle, en jour, ou en date et heure.
  *
  * Le contrat porte ses horodatages en ISO 8601, que personne ne lit de l'œil. Le type de
  * la propriété ne suffirait pas à les reconnaître — une date y est une chaîne comme une
  * autre — et la table les rendrait bruts.
  */
-type Rendu = 'texte' | 'date' | 'instant'
+type Rendu = 'texte' | 'date' | 'instant' | 'reference'
 
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
@@ -232,7 +278,7 @@ const COLONNES: readonly Colonne[] = [
   { cle: 'detail', libelle: 'Detail', rendu: 'texte', triable: true },
   { cle: 'statut', libelle: 'Statut', rendu: 'texte', triable: true },
   { cle: 'priorite', libelle: 'Priorite', rendu: 'texte', triable: true },
-  { cle: 'auteur_id', libelle: 'Auteur id', rendu: 'texte', triable: true },
+  { cle: 'auteur_id', libelle: 'Auteur', rendu: 'reference', triable: false },
   { cle: 'updated_at', libelle: 'Mise à jour', rendu: 'instant', triable: true },
 ]
 
@@ -243,7 +289,7 @@ const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[]
   { cle: 'detail', libelle: 'Detail', rendu: 'texte' },
   { cle: 'statut', libelle: 'Statut', rendu: 'texte' },
   { cle: 'priorite', libelle: 'Priorite', rendu: 'texte' },
-  { cle: 'auteur_id', libelle: 'Auteur id', rendu: 'texte' },
+  { cle: 'auteur_id', libelle: 'Auteur', rendu: 'reference' },
   { cle: 'created_at', libelle: 'Créé le', rendu: 'instant' },
   { cle: 'updated_at', libelle: 'Mise à jour', rendu: 'instant' },
 ]
@@ -301,6 +347,7 @@ async function charger(): Promise<void> {
     const reponse = await interroger(requete.value)
     lignes.value = reponse.lignes
     total.value = reponse.total
+    void nommer(reponse.lignes)
   } catch (cause) {
     lignes.value = []
     total.value = 0
@@ -369,6 +416,7 @@ async function detailler(cle: string): Promise<void> {
 
   try {
     detaillee.value = await lire(cle)
+    void nommer([detaillee.value])
   } catch (cause) {
     fauteDetail.value = raison(cause, TEXTES.introuvable)
   } finally {
@@ -498,8 +546,12 @@ function afficher(valeur: string | number | boolean | null, rendu: Rendu): strin
           </TableEmpty>
           <template v-else>
             <TableRow v-for="ligne in lignes" :key="ligne.id">
-              <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
-                {{ afficher(ligne[colonne.cle], colonne.rendu) }}
+              <TableCell
+                v-for="colonne in COLONNES"
+                :key="colonne.cle"
+                :title="colonne.rendu === 'reference' ? String(ligne[colonne.cle] ?? '') : undefined"
+              >
+                {{ lisible(colonne.cle, ligne[colonne.cle], colonne.rendu) }}
               </TableCell>
               <TableCell class="whitespace-nowrap text-right">
                 <Button variant="ghost" size="sm" @click="detailler(ligne.id)">
@@ -632,7 +684,9 @@ function afficher(valeur: string | number | boolean | null, rendu: Rendu): strin
             <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {{ propriete.libelle }}
             </dt>
-            <dd class="break-all">{{ afficher(detaillee[propriete.cle], propriete.rendu) }}</dd>
+            <dd class="break-all">
+              {{ lisible(propriete.cle, detaillee[propriete.cle], propriete.rendu) }}
+            </dd>
           </div>
         </dl>
       </SheetContent>

@@ -12,6 +12,7 @@ export interface BoolComparisonOperators {
   eq?: boolean | null;
   gt?: boolean | null;
   gte?: boolean | null;
+  in?: boolean[] | null;
   is_null?: boolean | null;
   lt?: boolean | null;
   lte?: boolean | null;
@@ -44,6 +45,7 @@ export interface DateComparisonOperators {
   eq?: null | DateSchema;
   gt?: null | DateSchema;
   gte?: null | DateSchema;
+  in?: DateSchema[] | null;
   is_null?: boolean | null;
   lt?: null | DateSchema;
   lte?: null | DateSchema;
@@ -62,6 +64,7 @@ export interface DateTimeComparisonOperators {
   eq?: null | DateTimeSchema;
   gt?: null | DateTimeSchema;
   gte?: null | DateTimeSchema;
+  in?: DateTimeSchema[] | null;
   is_null?: boolean | null;
   lt?: null | DateTimeSchema;
   lte?: null | DateTimeSchema;
@@ -123,6 +126,7 @@ export interface IntComparisonOperators {
   eq?: number | null;
   gt?: number | null;
   gte?: number | null;
+  in?: number[] | null;
   is_null?: boolean | null;
   lt?: number | null;
   lte?: number | null;
@@ -160,6 +164,12 @@ export type OneOfSchemaIncidentGravite = "basse" | "moyenne" | "haute" | OneOfOp
 /** Une page de résultats et de quoi situer la suivante. */
 export interface PageIncidentResponse {
   data: ({ constate_le: string; created_at: string; detail: string; duree_minutes?: number | null; echeance?: string | null; gravite: IncidentGravite; id: string; ouvert: boolean; reference: string; sujet: string; updated_at: string })[];
+  meta: Meta;
+}
+
+/** Une page de résultats et de quoi situer la suivante. */
+export interface PageUserSummary {
+  data: ({ email: string; id: string })[];
   meta: Meta;
 }
 
@@ -257,12 +267,28 @@ export interface UpdateIncident {
   sujet?: string | null;
 }
 
+/** Les conditions de `POST /users/filter`, écrites comme celles d'un filtre engendré. */
+export interface UserFilter {
+  email?: null | TextMatchSchema;
+  id?: null | UuidComparisonSchema;
+  sort?: string[] | null;
+}
+
 export interface UserResponse {
   created_at: string;
   email: string;
   email_verified_at?: string | null;
   id: string;
   role: string;
+}
+
+/**
+ * Ce que `POST /users/filter` rend d'un compte : de quoi le choisir et le nommer, rien de
+ * plus — ni le rôle ni les dates ne servent à une liste de sélection.
+ */
+export interface UserSummary {
+  email: string;
+  id: string;
 }
 
 /**
@@ -274,6 +300,7 @@ export interface UuidComparisonOperators {
   eq?: string | null;
   gt?: string | null;
   gte?: string | null;
+  in?: string[] | null;
   is_null?: boolean | null;
   lt?: string | null;
   lte?: string | null;
@@ -287,6 +314,11 @@ export interface IncidentsListQuery {
 }
 
 export interface IncidentsFilterQuery {
+  page?: number;
+  per_page?: number;
+}
+
+export interface UsersFilterQuery {
   page?: number;
   per_page?: number;
 }
@@ -521,6 +553,17 @@ export class ApiClient {
   incidentsUpdate(id: string, body: UpdateIncident): Promise<IncidentResponse> {
     return this.request<IncidentResponse>("PATCH", `/incidents/${encodeURIComponent(String(id))}`, {
       body,
+    });
+  }
+
+  /**
+   * POST /users/filter
+   * requiert un jeton
+   */
+  usersFilter(body: UserFilter, query: UsersFilterQuery = {}): Promise<PageUserSummary> {
+    return this.request<PageUserSummary>("POST", "/users/filter", {
+      body,
+      query,
     });
   }
 

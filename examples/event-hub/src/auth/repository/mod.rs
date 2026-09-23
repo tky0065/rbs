@@ -14,4 +14,4 @@ pub mod user;
 pub use refresh_token::{
     create_refresh_token, find_refresh_token, open_sessions_of, revoke_session, revoke_sessions_of,
 };
-pub use user::{Model, create, find, find_by_email};
+pub use user::{Model, create, filter, find, find_by_email};

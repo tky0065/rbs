@@ -15,12 +15,13 @@ async fn openapi_document(api: &Router) -> Value {
 
 /// Treize chemins, quinze points d'entrée : `/auth/sessions` porte à la fois la liste et
 /// la révocation globale, et `/auth/me` la lecture du profil et l'écriture de l'adresse.
-/// Un `#[utoipa::path]` qui disparaîtrait du document sans que cette suite rougisse
-/// laisserait le client TypeScript, déduit de ce même document, en silence sur la route
-/// perdue.
+/// `/users/filter` en ajoute un seizième, pour les écrans qui résolvent une référence vers
+/// un compte. Un `#[utoipa::path]` qui disparaîtrait du document sans que cette suite
+/// rougisse laisserait le client TypeScript, déduit de ce même document, en silence sur la
+/// route perdue.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn the_openapi_document_carries_the_fifteen_auth_operations() {
+async fn the_openapi_document_carries_the_sixteen_auth_operations() {
     let api = application().await;
 
     let document = openapi_document(&api).await;
@@ -39,6 +40,7 @@ async fn the_openapi_document_carries_the_fifteen_auth_operations() {
         "/auth/resend-verification",
         "/auth/sessions",
         "/auth/sessions/{id}",
+        "/users/filter",
     ] {
         assert!(
             document["paths"][chemin].is_object(),

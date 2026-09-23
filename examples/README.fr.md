@@ -201,7 +201,7 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   --force
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud commentaires \
-  --fields 'corps:text,ticket:references:tickets:cascade,auteur:references:users' \
+  --fields 'corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users' \
   --force
 cd .. && mv help-desk examples/help-desk
 ```
@@ -209,6 +209,9 @@ cd .. && mv help-desk examples/help-desk
 Les deux `generate crud` s'enchaînent dans l'ordre de la clé étrangère : `commentaires`
 référence `tickets`, et l'ordre inverse est refusé avant toute écriture — la cible doit
 exister dans le projet, et avoir sa migration, pour que la contrainte la vise.
+`label=sujet` désigne la colonne qui nomme un ticket dans l'écran des commentaires — dans
+son sélecteur de références comme dans sa liste — plutôt que d'en laisser le choix à
+l'inférence.
 
 Puis la seule retouche qu'enseigne le tutoriel, à la main : l'auteur est lu dans le jeton
 plutôt que pris dans le corps. Tel qu'engendré, `auteur_id` figure dans les deux DTO
@@ -224,7 +227,9 @@ d'entrée, si bien que tout appelant connecté écrit au nom d'autrui.
   contre la base — un corps qui nomme un autre compte réel crée pourtant le ticket au nom
   de l'appelant, et un `PATCH` qui nomme autrui laisse l'auteur en place.
 - `frontend/src/admin/vues/Tickets.vue`, `frontend/src/admin/vues/Commentaires.vue` : le
-  formulaire ne demande plus d'auteur ; la liste l'affiche toujours.
+  formulaire ne demande plus d'auteur — son sélecteur de références part, et le champ
+  quitte `Formulaire`, `VIERGE`, `corps()` et `saisie()` ; la liste l'affiche toujours, par
+  son adresse.
 
 `the_hand_edits_of_help_desk_are_in_place` les garde toutes. Le client vient en dernier,
 une fois les retouches faites, et aucun job de CI ne le régénère pour cet exemple — c'est
@@ -271,14 +276,12 @@ Deux entrées qui figuraient ici ont disparu, et c'est leur absence qui compte :
 - le garde posé sur le contrôleur, qu'écrit désormais `generate crud` — voir le bloc plus
   haut ;
 - le retrait du `#[allow(dead_code)]` sur `RequireRole`, dans `src/auth/guard.rs`. Le
-  fragment le porte toujours, délibérément : un projet qui installe `auth` sans engendrer
-  le moindre CRUD compile sous `clippy -D warnings`, et le trait y serait du code mort.
-  Garder ce retrait coûtait à la comparaison de non-dérive sa surveillance du fichier
-  entier — c'est exactement ainsi que la réécriture du garde en seuil est passée sous le
-  test sans être vue — en échange d'une ligne dont aucune route ne dépend. L'exemple prend
-  désormais le fichier tel qu'il est engendré, et le commentaire posé au-dessus de
-  l'attribut le dit : votre premier CRUD engendré appelle la garde, si bien que la ligne
-  ne masque plus rien et peut partir.
+  fragment n'écrit plus l'attribut : `POST /users/filter`, que `auth` monte lui-même,
+  appelle la garde, si bien que le trait est vivant dans tout projet qui porte le
+  fragment, CRUD ou non. Garder ce retrait à la main avait coûté à la comparaison de
+  non-dérive sa surveillance du fichier entier — c'est exactement ainsi que la réécriture
+  du garde en seuil était passée sous le test sans être vue. L'exemple prend le fichier tel
+  qu'il est engendré.
 
 `file-drop` en porte huit de plus. `--with-upload` sur `generate crud` écrit désormais les
 trois handlers de contenu eux-mêmes — `PUT`, `GET` et `HEAD` sur `/uploads/{id}/content`,

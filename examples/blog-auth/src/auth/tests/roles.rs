@@ -58,7 +58,7 @@ async fn user_or_above_route() -> Router {
 /// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
 /// la table, et le rôle ne voyage que dans un jeton émis après coup.
 // region: jeton_admin
-async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
+pub(super) async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
     let email = fresh_email();
     signed_up(api, &email).await;
 

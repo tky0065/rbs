@@ -201,7 +201,7 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   --force
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud commentaires \
-  --fields 'corps:text,ticket:references:tickets:cascade,auteur:references:users' \
+  --fields 'corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users' \
   --force
 cd .. && mv help-desk examples/help-desk
 ```
@@ -209,6 +209,8 @@ cd .. && mv help-desk examples/help-desk
 The two `generate crud` run in the order of the foreign key: `commentaires` references
 `tickets`, and the reverse order is refused before anything is written — the target has to
 exist in the project, and have a migration, for the constraint to point at it.
+`label=sujet` names the column that stands for a ticket on the comments screen — in its
+reference picker and in its list — rather than leaving that choice to inference.
 
 Then the one edit the tutorial teaches, by hand: the author is read from the token rather
 than taken from the body. As generated, `auteur_id` sits in both input DTOs, so any
@@ -224,7 +226,8 @@ signed-in caller writes in someone else's name.
   the database — a body naming another real account still creates the ticket in the
   caller's name, and a `PATCH` naming someone else leaves the author in place.
 - `frontend/src/admin/vues/Tickets.vue`, `frontend/src/admin/vues/Commentaires.vue`: the
-  form no longer asks for an author; the list still shows it.
+  form no longer asks for an author — its reference picker goes, and the field leaves
+  `Formulaire`, `VIERGE`, `corps()` and `saisie()`; the list still shows it, by its email.
 
 `the_hand_edits_of_help_desk_are_in_place` holds all of them. The client comes last, once
 the edits are in, and no CI job regenerates it for this example — this command does:
@@ -268,13 +271,11 @@ Two things that used to be listed here are gone, and their absence is the point:
 
 - the guard on the controller, now written by `generate crud` — see the block above;
 - the removal of `#[allow(dead_code)]` on `RequireRole` in `src/auth/guard.rs`. The
-  fragment still carries it, deliberately: a project that installs `auth` without
-  generating a single CRUD compiles under `clippy -D warnings`, and the trait would be
-  dead code there. Keeping the removal cost the drift comparison its watch over the whole
-  file — which is exactly how the guard's rewrite into a threshold slipped through the
-  test unnoticed — in exchange for one line no route depends on. The example now takes
-  the file as generated, and the comment above the attribute says as much: your first
-  generated CRUD calls the guard, so the line stops hiding anything and can go.
+  fragment no longer writes the attribute: `POST /users/filter`, which `auth` mounts
+  itself, calls the guard, so the trait is live in any project carrying the fragment, CRUD
+  or not. Keeping the removal by hand had cost the drift comparison its watch over the
+  whole file — which is exactly how the guard's rewrite into a threshold once slipped
+  through the test unnoticed. The example takes the file as generated.
 
 `file-drop` carries eight more. `--with-upload` on `generate crud` now writes the three
 content handlers themselves — `PUT`, `GET` and `HEAD` on `/uploads/{id}/content`, and the

@@ -1,9 +1,9 @@
-use rbs_core::{Error, Result};
+use rbs_core::{Error, Page, Pagination, Result};
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::super::config::FlowConfig;
-use super::super::dto::EmailRequest;
+use super::super::dto::{EmailRequest, UserFilter, UserSummary};
 use super::super::repository::{self, Model};
 use super::{normalise, verification, warn_taken};
 use crate::modules::mail::Mailer;
@@ -60,4 +60,25 @@ pub async fn change_email(
     }
 
     Ok(())
+}
+
+/// Une page de comptes, réduits à ce qu'une liste de sélection montre.
+pub async fn filter_users(
+    db: &DatabaseConnection,
+    filtre: &UserFilter,
+    pagination: &Pagination,
+) -> Result<Page<UserSummary>> {
+    let (comptes, total) = repository::filter(db, filtre, pagination).await?;
+
+    Ok(Page::new(
+        comptes
+            .into_iter()
+            .map(|compte| UserSummary {
+                id: compte.id,
+                email: compte.email,
+            })
+            .collect(),
+        pagination,
+        total,
+    ))
 }

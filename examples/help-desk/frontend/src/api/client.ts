@@ -48,6 +48,7 @@ export interface DateTimeComparisonOperators {
   eq?: null | DateTimeSchema;
   gt?: null | DateTimeSchema;
   gte?: null | DateTimeSchema;
+  in?: DateTimeSchema[] | null;
   is_null?: boolean | null;
   lt?: null | DateTimeSchema;
   lte?: null | DateTimeSchema;
@@ -119,6 +120,12 @@ export interface PageCommentaireResponse {
 /** Une page de résultats et de quoi situer la suivante. */
 export interface PageTicketResponse {
   data: ({ auteur_id: string; created_at: string; detail: string; id: string; priorite: TicketPriorite; statut: TicketStatut; sujet: string; updated_at: string })[];
+  meta: Meta;
+}
+
+/** Une page de résultats et de quoi situer la suivante. */
+export interface PageUserSummary {
+  data: ({ email: string; id: string })[];
   meta: Meta;
 }
 
@@ -244,12 +251,28 @@ export interface UpdateTicket {
   sujet?: string | null;
 }
 
+/** Les conditions de `POST /users/filter`, écrites comme celles d'un filtre engendré. */
+export interface UserFilter {
+  email?: null | TextMatchSchema;
+  id?: null | UuidComparisonSchema;
+  sort?: string[] | null;
+}
+
 export interface UserResponse {
   created_at: string;
   email: string;
   email_verified_at?: string | null;
   id: string;
   role: string;
+}
+
+/**
+ * Ce que `POST /users/filter` rend d'un compte : de quoi le choisir et le nommer, rien de
+ * plus — ni le rôle ni les dates ne servent à une liste de sélection.
+ */
+export interface UserSummary {
+  email: string;
+  id: string;
 }
 
 /**
@@ -261,6 +284,7 @@ export interface UuidComparisonOperators {
   eq?: string | null;
   gt?: string | null;
   gte?: string | null;
+  in?: string[] | null;
   is_null?: boolean | null;
   lt?: string | null;
   lte?: string | null;
@@ -284,6 +308,11 @@ export interface TicketsListQuery {
 }
 
 export interface TicketsFilterQuery {
+  page?: number;
+  per_page?: number;
+}
+
+export interface UsersFilterQuery {
   page?: number;
   per_page?: number;
 }
@@ -576,6 +605,17 @@ export class ApiClient {
   ticketsUpdate(id: string, body: UpdateTicket): Promise<TicketResponse> {
     return this.request<TicketResponse>("PATCH", `/tickets/${encodeURIComponent(String(id))}`, {
       body,
+    });
+  }
+
+  /**
+   * POST /users/filter
+   * requiert un jeton
+   */
+  usersFilter(body: UserFilter, query: UsersFilterQuery = {}): Promise<PageUserSummary> {
+    return this.request<PageUserSummary>("POST", "/users/filter", {
+      body,
+      query,
     });
   }
 

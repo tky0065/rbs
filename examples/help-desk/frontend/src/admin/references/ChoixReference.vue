@@ -1,0 +1,170 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+
+import { Input } from '@/components/ui/input'
+
+import { courte, refusee, type Entree } from './libelles'
+
+const props = defineProps<{
+  id: string
+  modelValue: string
+  libelle: string | undefined
+  chercher: (motif: string) => Promise<Entree[]>
+  optionnel?: boolean
+}>()
+
+const emit = defineEmits<{ 'update:modelValue': [valeur: string] }>()
+
+const TEXTES = {
+  recherche: 'Rechercher…',
+  aucun: 'Aucun',
+  rien: 'Aucune correspondance',
+  reserve: 'Réservé aux administrateurs',
+  indisponible: 'Recherche indisponible',
+} as const
+
+// La dernière entrée choisie. L'écran ne nomme que les lignes de sa page courante : une
+// entrée prise hors d'elle n'y a pas de libellé, et le repos retomberait sur l'identifiant
+// raccourci juste après le choix.
+let dernier: Entree | null = null
+
+/** Ce que le champ montre au repos : le libellé de la valeur, sinon son identifiant. */
+function repos(): string {
+  if (props.modelValue === '') {
+    return ''
+  }
+  if (props.libelle !== undefined) {
+    return props.libelle
+  }
+  if (dernier !== null && dernier.cle === props.modelValue) {
+    return dernier.libelle
+  }
+  return courte(props.modelValue)
+}
+
+const saisie = ref(repos())
+const choisi = ref(saisie.value)
+const ouvert = ref(false)
+const resultats = ref<Entree[]>([])
+const actif = ref(-1)
+const faute = ref<string | null>(null)
+let minuterie: ReturnType<typeof setTimeout> | undefined
+
+// Le formulaire se rouvre sur une autre ligne, ou le libellé arrive après lui : le repos suit.
+watch(
+  () => [props.modelValue, props.libelle],
+  () => {
+    choisi.value = repos()
+    if (!ouvert.value) {
+      saisie.value = choisi.value
+    }
+  },
+)
+
+async function chercher(motif: string): Promise<void> {
+  try {
+    resultats.value = await props.chercher(motif)
+    faute.value = null
+  } catch (cause) {
+    resultats.value = []
+    faute.value = refusee(cause) ? TEXTES.reserve : TEXTES.indisponible
+  }
+  actif.value = resultats.value.length > 0 ? 0 : -1
+}
+
+function ouvrir(): void {
+  ouvert.value = true
+  void chercher('')
+}
+
+function taper(valeur: string | number): void {
+  saisie.value = String(valeur)
+  ouvert.value = true
+  clearTimeout(minuterie)
+  minuterie = setTimeout(() => void chercher(saisie.value.trim()), 250)
+}
+
+function choisir(entree: Entree | null): void {
+  dernier = entree
+  emit('update:modelValue', entree?.cle ?? '')
+  choisi.value = entree?.libelle ?? ''
+  saisie.value = choisi.value
+  ouvert.value = false
+}
+
+function fermer(): void {
+  ouvert.value = false
+  saisie.value = choisi.value
+}
+
+function clavier(evenement: KeyboardEvent): void {
+  if (evenement.key === 'ArrowDown') {
+    evenement.preventDefault()
+    actif.value = Math.min(actif.value + 1, resultats.value.length - 1)
+  } else if (evenement.key === 'ArrowUp') {
+    evenement.preventDefault()
+    actif.value = Math.max(actif.value - 1, 0)
+  } else if (evenement.key === 'Enter' && ouvert.value) {
+    evenement.preventDefault()
+    const entree = resultats.value[actif.value]
+    if (entree !== undefined) {
+      choisir(entree)
+    }
+  } else if (evenement.key === 'Escape') {
+    fermer()
+  }
+}
+</script>
+
+<!--
+  Un champ qui cherche, et une liste sous lui. `mousedown.prevent` et non `click` : le clic
+  arriverait après la perte du focus, qui a déjà refermé la liste.
+-->
+<template>
+  <div class="relative">
+    <Input
+      :id="id"
+      role="combobox"
+      autocomplete="off"
+      :aria-expanded="ouvert"
+      :aria-controls="`${id}-liste`"
+      :placeholder="TEXTES.recherche"
+      :model-value="saisie"
+      @update:model-value="taper"
+      @focus="ouvrir"
+      @blur="fermer"
+      @keydown="clavier"
+    />
+    <ul
+      v-if="ouvert"
+      :id="`${id}-liste`"
+      role="listbox"
+      class="absolute z-50 mt-1 max-h-64 w-full overflow-auto border border-border bg-background shadow-md"
+    >
+      <li
+        v-if="optionnel"
+        role="option"
+        :aria-selected="false"
+        class="cursor-pointer px-3 py-2 text-muted-foreground hover:bg-muted"
+        @mousedown.prevent="choisir(null)"
+      >
+        {{ TEXTES.aucun }}
+      </li>
+      <li
+        v-for="(entree, rang) in resultats"
+        :key="entree.cle"
+        role="option"
+        :aria-selected="rang === actif"
+        class="cursor-pointer px-3 py-2 hover:bg-muted"
+        :class="{ 'bg-muted': rang === actif }"
+        @mousedown.prevent="choisir(entree)"
+      >
+        {{ entree.libelle }}
+      </li>
+      <li v-if="faute" class="px-3 py-2 text-destructive">{{ faute }}</li>
+      <li v-else-if="resultats.length === 0" class="px-3 py-2 text-muted-foreground">
+        {{ TEXTES.rien }}
+      </li>
+    </ul>
+  </div>
+</template>

@@ -1,8 +1,11 @@
+use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use rbs_core::{HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use rbs_core::{HasCoreState, Identity, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 
-use super::super::dto::EmailRequest;
+use super::super::dto::{EmailRequest, UserFilter, UserSummary};
+use super::super::guard::RequireRole;
+use super::super::model::Role;
 use super::super::service;
 use crate::state::AppState;
 
@@ -35,4 +38,37 @@ pub async fn update_me(
     service::change_email(state.core().db(), state.mail(), state.flows(), id, input).await?;
 
     Ok(StatusCode::ACCEPTED)
+}
+
+// Réservé aux administrateurs : la liste des adresses est une donnée personnelle, et
+// l'espace d'administration est ouvert à toute session.
+#[utoipa::path(
+    post,
+    path = "/users/filter",
+    tag = "users",
+    operation_id = "users_filter",
+    security(("bearer" = [])),
+    params(
+        ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+        ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
+    ),
+    request_body = UserFilter,
+    responses(
+        (status = 200, description = "page de comptes", body = Page<UserSummary>),
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn filter_users(
+    State(state): State<AppState>,
+    identite: Identity,
+    pagination: Pagination,
+    Json(filtre): Json<UserFilter>,
+) -> Result<Json<Page<UserSummary>>> {
+    identite.require_role(Role::Admin)?;
+
+    Ok(Json(
+        service::filter_users(state.core().db(), &filtre, &pagination).await?,
+    ))
 }

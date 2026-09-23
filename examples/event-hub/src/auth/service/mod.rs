@@ -26,7 +26,7 @@ pub mod password;
 pub mod session;
 pub mod verification;
 
-pub use account::change_email;
+pub use account::{change_email, filter_users};
 pub use session::{
     login, logout, me, refresh, register, revoke_session, revoke_sessions, sessions,
 };

@@ -1,9 +1,14 @@
 use chrono::Utc;
-use rbs_core::{Error, Result};
+use rbs_core::{Comparison, Error, Pagination, Result, TextMatch};
 use sea_orm::error::SqlErr;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
-use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::sea_query::LikeExpr;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, Value,
+};
 
+use super::super::dto::UserFilter;
 use super::super::model::user::{self, Entity};
 
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
@@ -19,6 +24,122 @@ pub async fn find_by_email(db: &impl ConnectionTrait, email: &str) -> Result<Opt
         .filter(user::Column::Email.eq(email))
         .one(db)
         .await?)
+}
+
+/// Ce que `POST /users/filter` interroge : un écran qui résout une référence vers un
+/// compte n'a besoin que de l'identifiant et de l'adresse, mais la requête qui les rend
+/// suit les mêmes règles qu'un filtre engendré — colonnes limitées à `id` et `email`.
+pub async fn filter(
+    db: &impl ConnectionTrait,
+    filtre: &UserFilter,
+    pagination: &Pagination,
+) -> Result<(Vec<Model>, u64)> {
+    let requete = apply(Entity::find(), filtre)?;
+
+    let page = requete
+        .clone()
+        .offset(pagination.offset())
+        .limit(pagination.per_page())
+        .all(db);
+
+    // Le total compte les comptes que le filtre retient : l'attendre avant la page ferait
+    // deux allers-retours en série à chaque appel.
+    let (comptes, total) = tokio::try_join!(page, requete.count(db))?;
+
+    Ok((comptes, total))
+}
+
+/// Applique le filtre et le tri, comme `apply` du filtre engendré — l'ordre par défaut
+/// reste l'`id` décroissant.
+fn apply(requete: sea_orm::Select<Entity>, filtre: &UserFilter) -> Result<sea_orm::Select<Entity>> {
+    let conditions = Condition::all()
+        .add(compare(user::Column::Id, filtre.id.as_ref()))
+        .add(matches(user::Column::Email, filtre.email.as_ref()));
+
+    let requete = requete.filter(conditions);
+
+    let Some(sort) = filtre.sort.as_ref().filter(|sort| !sort.keys().is_empty()) else {
+        return Ok(requete.order_by_desc(user::Column::Id));
+    };
+
+    sort.keys().iter().try_fold(requete, |requete, key| {
+        let colonne = column_of(&key.column)?;
+
+        Ok(match key.descending {
+            true => requete.order_by_desc(colonne),
+            false => requete.order_by_asc(colonne),
+        })
+    })
+}
+
+/// Traduit un nom de colonne reçu du client en `Column`, comme `column_of` du filtre
+/// engendré — restreint aux deux colonnes que `UserFilter` accepte de trier.
+fn column_of(name: &str) -> Result<user::Column> {
+    Ok(match name {
+        "id" => user::Column::Id,
+        "email" => user::Column::Email,
+        "created_at" => user::Column::CreatedAt,
+        inconnue => {
+            return Err(Error::BadRequest(format!(
+                "colonne de tri inconnue « {inconnue} » — id, email, created_at"
+            )));
+        }
+    })
+}
+
+/// Les conditions portées sur une colonne comparable, en ET entre elles — mêmes
+/// conditions que le filtre engendré, pour qu'un écran interroge les comptes comme une
+/// table.
+fn compare<T: Into<Value> + Clone>(
+    colonne: user::Column,
+    compare: Option<&Comparison<T>>,
+) -> Condition {
+    let Some(compare) = compare else {
+        return Condition::all();
+    };
+
+    null_condition(colonne, compare.is_null)
+        .add_option(compare.eq.clone().map(|valeur| colonne.eq(valeur)))
+        .add_option(compare.gt.clone().map(|valeur| colonne.gt(valeur)))
+        .add_option(compare.gte.clone().map(|valeur| colonne.gte(valeur)))
+        .add_option(compare.lt.clone().map(|valeur| colonne.lt(valeur)))
+        .add_option(compare.lte.clone().map(|valeur| colonne.lte(valeur)))
+        .add_option(compare.r#in.clone().map(|valeurs| colonne.is_in(valeurs)))
+}
+
+/// Les conditions portées sur une colonne textuelle, en ET entre elles — mêmes conditions
+/// que le filtre engendré, pour qu'un écran interroge les comptes comme une table.
+fn matches(colonne: user::Column, recherche: Option<&TextMatch>) -> Condition {
+    let Some(recherche) = recherche else {
+        return Condition::all();
+    };
+
+    null_condition(colonne, recherche.is_null)
+        .add_option(recherche.eq.clone().map(|valeur| colonne.eq(valeur)))
+        .add_option(recherche.contains.as_ref().map(|v| colonne.like(motif(v))))
+}
+
+/// Mêmes conditions que le filtre engendré, pour qu'un écran interroge les comptes comme
+/// une table.
+fn motif(valeur: &str) -> LikeExpr {
+    let mut echappee = String::with_capacity(valeur.len() + 2);
+    for caractere in valeur.chars() {
+        if matches!(caractere, '!' | '%' | '_') {
+            echappee.push('!');
+        }
+        echappee.push(caractere);
+    }
+    LikeExpr::new(format!("%{echappee}%")).escape('!')
+}
+
+/// Mêmes conditions que le filtre engendré, pour qu'un écran interroge les comptes comme
+/// une table.
+fn null_condition(colonne: user::Column, is_null: Option<bool>) -> Condition {
+    match is_null {
+        Some(true) => Condition::all().add(colonne.is_null()),
+        Some(false) => Condition::all().add(colonne.is_not_null()),
+        None => Condition::all(),
+    }
 }
 
 /// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
