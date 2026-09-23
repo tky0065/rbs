@@ -135,6 +135,8 @@ pub(crate) struct Reference {
     /// Nom de la table visée, tel qu'il a été écrit : `users`.
     pub target: String,
     pub on_delete: OnDelete,
+    /// Colonne de la cible qui la représente à l'écran, quand `label=` l'a forcée.
+    pub label: Option<String>,
 }
 
 /// Un champ décrit une colonne scalaire, une référence, ou une énumération — dont il
@@ -595,6 +597,7 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         FieldKind::Reference(Reference {
             target: target.to_string(),
             on_delete: OnDelete::Restrict,
+            label: None,
         })
     } else if raw_type == "enum" || raw_type.starts_with("enum(") {
         let values = parse_enum_values(raw_type).map_err(|kind| error(name, kind))?;
@@ -673,6 +676,27 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
                 ));
             };
             field.max = Some(borne);
+            continue;
+        }
+
+        // `label=<colonne>` ne vaut que sur une référence : sur un scalaire, il tombe dans
+        // le bras des modificateurs inconnus, comme `cascade`.
+        if is_reference && let Some(colonne) = modifier.strip_prefix("label=") {
+            let FieldKind::Reference(reference) = &mut field.kind else {
+                unreachable!("is_reference vient d'être établi");
+            };
+            if reference.label.is_some() {
+                return Err(error(
+                    name,
+                    ErrorKind::DuplicateModifier {
+                        name: "label".to_string(),
+                    },
+                ));
+            }
+            if colonne.is_empty() {
+                return Err(error(name, ErrorKind::InvalidLabel));
+            }
+            reference.label = Some(colonne.to_string());
             continue;
         }
 
@@ -989,6 +1013,59 @@ mod tests {
             ErrorKind::DuplicateModifier {
                 name: "max".to_string()
             }
+        );
+    }
+
+    #[test]
+    fn a_reference_takes_a_label() {
+        let champs = parse("ticket:references:tickets:cascade:label=sujet").expect("valide");
+
+        assert_eq!(
+            champs[0].reference().expect("référence").label.as_deref(),
+            Some("sujet")
+        );
+    }
+
+    #[test]
+    fn a_reference_without_label_leaves_it_to_inference() {
+        let champs = parse("ticket:references:tickets").expect("valide");
+
+        assert_eq!(champs[0].reference().expect("référence").label, None);
+    }
+
+    #[test]
+    fn a_label_on_a_scalar_is_an_unknown_modifier() {
+        let erreur = parse("titre:string:label=titre")
+            .expect_err("refus attendu")
+            .to_string();
+
+        assert!(
+            erreur.contains("modificateur inconnu « label=titre »"),
+            "{erreur}"
+        );
+    }
+
+    #[test]
+    fn an_empty_label_is_refused() {
+        let erreur = parse("ticket:references:tickets:label=")
+            .expect_err("refus attendu")
+            .to_string();
+
+        assert!(
+            erreur.contains("« label » attend un nom de colonne"),
+            "{erreur}"
+        );
+    }
+
+    #[test]
+    fn a_repeated_label_is_refused() {
+        let erreur = parse("ticket:references:tickets:label=a:label=b")
+            .expect_err("refus attendu")
+            .to_string();
+
+        assert!(
+            erreur.contains("modificateur « label » en double"),
+            "{erreur}"
         );
     }
 

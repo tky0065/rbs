@@ -90,6 +90,7 @@ pub(crate) enum ErrorKind {
         /// Le fichier du CRUD qui déclare déjà ce nom-là : `dto.rs`.
         fichier: String,
     },
+    InvalidLabel,
 }
 
 impl ErrorKind {
@@ -180,6 +181,9 @@ impl ErrorKind {
                 "« {label} » nommerait le type « <entité>{type_name} », que « {fichier} » \
                  déclare déjà"
             ),
+            Self::InvalidLabel => {
+                "« label » attend un nom de colonne de la table visée".to_string()
+            }
         }
     }
 
@@ -216,7 +220,7 @@ impl ErrorKind {
                 Some(names)
             }
             Self::UnknownModifier { .. } => Some(
-                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify, label=<colonne>"
                     .to_string(),
             ),
             Self::DuplicateModifier { .. } => None,
@@ -261,6 +265,9 @@ impl ErrorKind {
                  de l'entité suivi du sien, en PascalCase"
                     .to_string(),
             ),
+            Self::InvalidLabel => {
+                Some(format!("exemple : « {label}:references:tickets:label=sujet »"))
+            }
         }
     }
 }
@@ -515,7 +522,7 @@ mod tests {
         assert!(text.contains("modificateur inconnu « uniq »"), "{text}");
         assert!(
             text.contains(
-                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify, label=<colonne>"
             ),
             "{text}"
         );
