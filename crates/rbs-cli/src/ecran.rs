@@ -1523,6 +1523,64 @@ mod tests {
         assert!(declaration < premier_appel, "{rendu}");
     }
 
+    fn selecteur_rendu() -> String {
+        Renderer::new()
+            .render(GENERIQUES[0].1, context! { lang => "fr" })
+            .expect("le sélecteur se rend")
+    }
+
+    fn corps<'a>(rendu: &'a str, ouverture: &str) -> &'a str {
+        rendu
+            .split(ouverture)
+            .nth(1)
+            .and_then(|suite| suite.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("{ouverture} est rendue :\n{rendu}"))
+    }
+
+    /// Jamais un libellé faux : une source qui ignore `in` rend des lignes quelconques, et
+    /// seules celles qu'on a demandées reçoivent un libellé.
+    #[test]
+    fn the_labels_keep_only_the_identifiers_they_asked_for() {
+        let rendu = Renderer::new()
+            .render(GENERIQUES[1].1, context! { lang => "fr" })
+            .expect("les libellés se rendent");
+
+        let resoudre = corps(&rendu, "export async function resoudre(");
+        let garde = resoudre
+            .find("if (voulus.has(entree.cle)) {")
+            .expect("les réponses sont filtrées par les identifiants demandés");
+        let pose = resoudre
+            .find("libelles.set(entree.cle, entree.libelle)")
+            .expect("les libellés sont posés");
+        assert!(garde < pose, "{resoudre}");
+        assert_eq!(
+            resoudre.matches("libelles.set(").count(),
+            1,
+            "un libellé se pose hors de la garde :\n{resoudre}"
+        );
+    }
+
+    /// Un 403 dit que la recherche est réservée, et non qu'elle est en panne : l'opérateur
+    /// qui n'est pas admin sait alors pourquoi la liste reste vide.
+    #[test]
+    fn the_selector_tells_a_refusal_from_a_failure() {
+        let rendu = selecteur_rendu();
+
+        let chercher = corps(
+            &rendu,
+            "async function chercher(motif: string): Promise<void> {",
+        );
+        assert!(
+            chercher
+                .contains("faute.value = refusee(cause) ? TEXTES.reserve : TEXTES.indisponible"),
+            "{chercher}"
+        );
+        assert!(
+            rendu.contains("reserve: 'Réservé aux administrateurs'"),
+            "{rendu}"
+        );
+    }
+
     /// Sans colonne libellé, la recherche n'a rien où chercher le motif : le paramètre
     /// reste, mais nommé pour que `noUnusedParameters` ne l'arrête pas.
     #[test]
