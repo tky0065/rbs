@@ -101,6 +101,7 @@ fn compare<T: Into<Value> + Clone>(colonne: Column, compare: Option<&Comparison<
         .add_option(compare.gte.clone().map(|valeur| colonne.gte(valeur)))
         .add_option(compare.lt.clone().map(|valeur| colonne.lt(valeur)))
         .add_option(compare.lte.clone().map(|valeur| colonne.lte(valeur)))
+        .add_option(compare.r#in.clone().map(|valeurs| colonne.is_in(valeurs)))
 }
 
 /// Les conditions portées sur une colonne textuelle, en ET entre elles.

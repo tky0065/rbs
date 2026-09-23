@@ -436,6 +436,20 @@ mod tests {
         );
     }
 
+    /// `in` est lu par le noyau : un `compare()` qui l'ignorerait rendrait la table entière
+    /// à qui demande vingt identifiants.
+    #[test]
+    fn the_generated_compare_applies_in() {
+        let rendered = filtre("articles", "title:string,views:int");
+
+        assert!(
+            rendered.contains(
+                ".add_option(compare.r#in.clone().map(|valeurs| colonne.is_in(valeurs)))"
+            ),
+            "{rendered}"
+        );
+    }
+
     /// Une référence se compare, jamais ne se cherche par sous-chaîne : c'est un
     /// identifiant.
     #[test]
