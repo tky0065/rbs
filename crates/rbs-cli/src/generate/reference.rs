@@ -173,13 +173,19 @@ fn colonnes_de_la_cible(
             .map(Field::column_name)
             .collect()
     } else {
-        match entities::find(entities, cible) {
+        let mut colonnes = match entities::find(entities, cible) {
             Some(entity) => colonnes_textuelles(
                 &fs::read_to_string(root.join(&entity.file)).unwrap_or_default(),
                 cible,
             ),
             None => Vec::new(),
+        };
+        // `POST /users/filter` ne rend que `id` et `email` : toute autre colonne de la
+        // table — `password_hash` au premier chef — manquerait au type que l'écran lit.
+        if cible == "users" {
+            colonnes.retain(|colonne| colonne == "email");
         }
+        colonnes
     }
 }
 

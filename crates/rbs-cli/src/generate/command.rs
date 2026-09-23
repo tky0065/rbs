@@ -1122,6 +1122,29 @@ mod tests {
         );
     }
 
+    /// `password_hash` est une colonne textuelle de `users`, mais `POST /users/filter` ne
+    /// rend que `id` et `email` : l'écran qui la lirait ne passerait pas `vue-tsc`.
+    #[test]
+    fn a_reference_to_users_is_labelled_by_its_email_only() {
+        let (_dir, root) = project_with_auth();
+        commit(&root);
+
+        let erreur = run(&options(
+            &root,
+            "articles",
+            Some("titre:string,auteur:references:users:label=password_hash"),
+            true,
+        ))
+        .expect_err("refus attendu")
+        .to_string();
+
+        assert!(erreur.contains("« password_hash »"), "{erreur}");
+        assert!(
+            erreur.contains("colonnes textuelles : email"),
+            "seule `email` est proposée : {erreur}"
+        );
+    }
+
     /// Une référence vers la table qu'on engendre elle-même : ses colonnes textuelles
     /// sont celles des champs de la feature, pas d'un fichier déjà sur le disque.
     #[test]
