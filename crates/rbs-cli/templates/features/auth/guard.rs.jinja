@@ -23,11 +23,6 @@ use crate::state::AppState;
 ///     ...
 /// }
 /// ```
-// Le fragment seul n'appelle pas cette garde, et un binaire n'exporte rien qui la
-// tiendrait en vie : sans cette ligne, un projet portant `auth` et aucun CRUD ne
-// compilerait pas sous `clippy -D warnings`. Un CRUD engendré sous `auth` l'appelle, lui —
-// dès votre première feature cette ligne ne masque donc plus rien, et se retire.
-#[allow(dead_code)]
 pub trait RequireRole {
     /// Rend [`Error::Forbidden`] si l'appelant porte un rôle inférieur à `minimum`.
     fn require_role(&self, minimum: Role) -> Result<()>;
