@@ -251,10 +251,40 @@ pub(crate) enum Error {
         /// Table de la feature réparée.
         table: String,
     },
+
+    /// Le noyau du projet précède l'opérateur `in` que le filtre engendré emploie.
+    #[error(
+        "le projet est en rbs {projet} : le filtre engendré emploie l'opérateur `in`, que \
+         rbs-core n'a qu'à partir de 1.10.0"
+    )]
+    NoyauAnterieur {
+        /// La version du projet.
+        projet: String,
+    },
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
+
+/// La version de `rbs-core` qui apporte `in` sur les colonnes comparables.
+const NOYAU_IN: [u64; 3] = [1, 10, 0];
+
+/// Le projet porte-t-il un noyau antérieur à `in`, alors que ce CLI l'engendre ?
+///
+/// La seconde condition endort la garde tant que le workspace n'a pas été monté : les
+/// projets qu'il crée d'ici là portent encore l'ancien numéro. Une version illisible
+/// n'est pas tenue pour antérieure — mieux vaut un projet qui échoue à compiler qu'un
+/// refus à tort.
+fn noyau_anterieur(projet: &str, cli: &str) -> bool {
+    let (Some(projet), Some(cli)) = (
+        crate::upgrade::nombres(projet),
+        crate::upgrade::nombres(cli),
+    ) else {
+        return false;
+    };
+
+    cli >= NOYAU_IN && projet < NOYAU_IN
+}
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -265,6 +295,9 @@ impl Error {
     pub(crate) fn remedy(&self) -> Option<String> {
         match self {
             Error::Plan(erreur @ plan::Error::Anchor(_)) => erreur.remede(),
+            Error::NoyauAnterieur { .. } => {
+                Some("lancez `rbs upgrade`, puis relancez la commande".to_string())
+            }
             _ => None,
         }
     }
@@ -295,6 +328,7 @@ impl Codee for Error {
             Error::RoleInconnu { .. } => "role_inconnu",
             Error::EnfantSansCle { .. } => "enfant_sans_cle",
             Error::EcranOccupe { .. } => "ecran_occupe",
+            Error::NoyauAnterieur { .. } => "noyau_anterieur",
         }
     }
 
@@ -322,6 +356,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les relire
     // elle-même.
     let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
+
+    // Un filtre engendré aujourd'hui lit `in` : sur un noyau antérieur à 1.10.0, il ne
+    // compilerait plus. La garde dort tant que ce CLI lui-même n'a pas atteint 1.10.0.
+    if noyau_anterieur(&metadonnees.version, env!("CARGO_PKG_VERSION")) {
+        return Err(Error::NoyauAnterieur {
+            projet: metadonnees.version.clone(),
+        });
+    }
 
     if !options.force {
         git::garde(&root)?;
@@ -849,7 +891,8 @@ impl crate::errors::Classee for Error {
             | Self::SoftDeleteColonneReservee { .. }
             | Self::RoleInconnu { .. }
             | Self::EnfantSansCle { .. }
-            | Self::EcranOccupe { .. } => Sortie::Usage,
+            | Self::EcranOccupe { .. }
+            | Self::NoyauAnterieur { .. } => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
             Self::Rendu { .. } | Self::MigrationsAbsentes(_) | Self::UploadStorageHorsModules => {
                 Sortie::Faute
@@ -2876,5 +2919,26 @@ mod tests {
             .filter(|(chemin, _)| !chemin.starts_with("migration"))
             .map(|(chemin, contenu)| (chemin.clone(), contenu.clone()))
             .collect()
+    }
+
+    /// Un `filter.rs` d'aujourd'hui lit `in`, que le noyau n'a qu'à partir de 1.10.0 : le
+    /// rendre sur un noyau antérieur laisserait un projet qui ne compile plus.
+    #[test]
+    fn a_core_older_than_the_in_operator_is_refused_once_the_cli_ships_it() {
+        assert!(noyau_anterieur("1.9.0", "1.10.0"));
+        assert!(!noyau_anterieur("1.10.0", "1.10.0"));
+        assert!(!noyau_anterieur("1.11.2", "1.12.0"));
+    }
+
+    /// Tant que le workspace n'est pas monté en 1.10.0, les projets qu'il crée portent
+    /// l'ancien numéro : la garde doit dormir, sans quoi aucun exemple ne se régénère.
+    #[test]
+    fn the_guard_sleeps_while_the_cli_itself_is_older() {
+        assert!(!noyau_anterieur("1.9.0", "1.9.0"));
+    }
+
+    #[test]
+    fn an_unreadable_version_is_not_taken_for_an_older_one() {
+        assert!(!noyau_anterieur("inconnue", "1.10.0"));
     }
 }
