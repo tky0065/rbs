@@ -556,6 +556,7 @@ fn the_auth_tests_of_the_generated_project_pass() {
         "auth::tests::users::a_user_listing_accounts_gets_403",
         "auth::tests::users::an_admin_resolves_accounts_by_their_ids_and_reads_only_id_and_email",
         "auth::tests::users::an_admin_searches_accounts_by_email",
+        "auth::tests::users::an_admin_searches_accounts_whatever_the_case",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),

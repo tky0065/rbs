@@ -69,6 +69,6 @@ pub async fn filter_users(
     identite.require_role(Role::Admin)?;
 
     Ok(Json(
-        service::filter_users(state.core().db(), &filtre, &pagination).await?,
+        service::filter_users(state.core().db(), filtre, &pagination).await?,
     ))
 }

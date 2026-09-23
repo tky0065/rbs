@@ -554,7 +554,9 @@ search — so it reads the same body as the filter route `generate crud` writes 
 on two columns: `id`, which takes `in`, and `email`, which takes `contains`, with `sort` on
 `id`, `email` or `created_at`. `page` and `per_page` stay in the query string, and
 `per_page` is capped at 100 as everywhere. `contains` searches the address as it was
-stored, trimmed and lowercased.
+stored, trimmed and lowercased, and the route lowercases what it is given for `contains`
+and `eq` alike: `ALICE` finds `alice@example.test`, although PostgreSQL's `LIKE` and `=`
+tell the case apart.
 
 The answer is a page of `UserSummary`, which carries `id` and `email` and nothing else —
 not the `UserResponse` of `/auth/me`: a list meant to pick an account has no use for a role

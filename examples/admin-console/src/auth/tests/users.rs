@@ -89,3 +89,35 @@ async fn an_admin_searches_accounts_by_email() {
         "{body}"
     );
 }
+
+/// Les adresses sont écrites en minuscules : une recherche tapée en majuscules les trouve
+/// quand même, alors que `LIKE` et `=` distinguent la casse sous PostgreSQL.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_admin_searches_accounts_whatever_the_case() {
+    let api = application().await;
+    let db = connection().await;
+    let admin = login_as_admin(&api, &db).await;
+    let cible = registered_user(&db).await;
+
+    for corps in [
+        json!({ "email": { "contains": cible.email[..12].to_uppercase() } }),
+        json!({ "email": { "eq": cible.email.to_uppercase() } }),
+    ] {
+        let (status, body) = call(
+            &api,
+            post_json_authenticated("/users/filter", &access_for(&admin), corps.clone()),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(
+            body["data"]
+                .as_array()
+                .expect("une page")
+                .iter()
+                .any(|l| l["id"] == cible.id.to_string()),
+            "{corps} : {body}"
+        );
+    }
+}

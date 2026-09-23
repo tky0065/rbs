@@ -575,7 +575,9 @@ route de filtre qu'écrit `generate crud` pour une table, sur deux colonnes : `i
 `in`, et `email`, qui prend `contains`, avec `sort` sur `id`, `email` ou `created_at`.
 `page` et `per_page` restent dans la chaîne de requête, et `per_page` est plafonné à 100
 comme partout. `contains` cherche dans l'adresse telle qu'elle a été enregistrée, sans
-blancs autour et en minuscules.
+blancs autour et en minuscules, et la route passe en minuscules ce qu'elle reçoit, pour
+`contains` comme pour `eq` : `ALICE` trouve `alice@example.test`, bien que le `LIKE` et le
+`=` de PostgreSQL distinguent la casse.
 
 La réponse est une page de `UserSummary`, qui porte `id` et `email` et rien d'autre — et non
 le `UserResponse` de `/auth/me` : une liste faite pour choisir un compte n'a que faire d'un

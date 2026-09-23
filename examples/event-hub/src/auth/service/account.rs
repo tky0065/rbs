@@ -65,10 +65,17 @@ pub async fn change_email(
 /// Une page de comptes, réduits à ce qu'une liste de sélection montre.
 pub async fn filter_users(
     db: &DatabaseConnection,
-    filtre: &UserFilter,
+    mut filtre: UserFilter,
     pagination: &Pagination,
 ) -> Result<Page<UserSummary>> {
-    let (comptes, total) = repository::filter(db, filtre, pagination).await?;
+    // Les adresses sont écrites en minuscules : `LIKE` et `=` distinguent la casse sous
+    // PostgreSQL, et une recherche tapée en majuscules n'y trouverait rien.
+    if let Some(email) = filtre.email.as_mut() {
+        email.eq = email.eq.as_deref().map(str::to_lowercase);
+        email.contains = email.contains.as_deref().map(str::to_lowercase);
+    }
+
+    let (comptes, total) = repository::filter(db, &filtre, pagination).await?;
 
     Ok(Page::new(
         comptes
