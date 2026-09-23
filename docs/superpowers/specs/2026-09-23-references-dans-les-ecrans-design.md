@@ -27,6 +27,31 @@ le défaut est celui du générateur.
 | Où se résout le libellé | Dans l'écran (approche A) : le contrat des API engendrées ne change pas. |
 | Colonne libellé | Devinée — la première colonne textuelle de la cible — et surchargeable par `label=<colonne>`. |
 | Droits sur les comptes | `POST /users/filter` réservé au rôle `admin`. |
+| Résoudre plusieurs identifiants | `Comparison<T>` gagne l'opérateur `in` dans `rbs-core`. |
+
+## 0. L'opérateur `in` dans `rbs-core`
+
+La résolution d'une page tient en un appel `{ id: { in: [...] } }` — mais
+`Comparison<T>` (`crates/rbs-core/src/filter/mod.rs:25`) ne porte que `eq`, `gt`, `gte`,
+`lt`, `lte` et `is_null` ; seul `OneOf`, réservé aux énumérations, connaît `in`. Pire :
+un opérateur inconnu est **ignoré en silence** (`ComparisonInput` n'a pas
+`deny_unknown_fields`), et la requête rendrait la table entière. Un `GET /{id}` par
+identifiant est écarté : la limite de débit par défaut est de 120 requêtes par minute et
+par adresse, et vingt appels par page et par colonne l'épuiseraient en quelques pages.
+
+- `Comparison<T>` gagne `pub r#in: Option<Vec<T>>` — lu par `ComparisonInput`, décrit par
+  les schémas `*ComparisonOperators`, et appliqué par le `compare()` du `filter.rs`
+  engendré (`templates/feature/filter.rs.jinja`) en `colonne.is_in(valeurs)`. Une liste
+  vide n'accepte aucune ligne, comme pour `OneOf`.
+- Ajouter un champ public à une structure aux champs tous publics rompt la construction
+  par littéral sans `..Default::default()` : la version est une **mineure**, 1.10.0, la
+  rupture est dite dans `crates/rbs-cli/notes/1.10.0.md`, et le lint `cargo-semver-checks`
+  qu'elle déclenche est déclassé et justifié — le traitement des fois précédentes.
+- Un `filter.rs` engendré par 1.10.0 lit `compare.r#in` et ne compile pas contre un
+  noyau antérieur. `generate crud` lit la version de `rbs-core` dans le `Cargo.toml` du
+  projet et **refuse au plan** un noyau antérieur à 1.10.0, remède `rbs upgrade` — qui
+  réécrit précisément cette ligne. Une dépendance par chemin, sans version (les exemples),
+  n'est pas bornée.
 
 ## 1. Ce que le CLI décide, au plan
 
@@ -77,8 +102,9 @@ contrat OpenAPI de la table engendrée sont inchangés.
   quand `optionnel`. Construit sur les composants vendus (`input`, et la liste en éléments
   natifs stylés par le thème) : aucun composant nouveau à vendre.
 - `libelles.ts` — `resoudre(chercher, ids)` rend une `Map<id, libelle>` : dédoublonne, un seul
-  appel `{ id: { in: [...] } }` avec `per_page` = nombre d'identifiants (100 au plus, une page
-  de table n'en porte que 20), cache pour la vie de l'écran.
+  appel `{ id: { in: [...] } }` — l'opérateur du §0 — avec `per_page` = nombre
+  d'identifiants (100 au plus, une page de table n'en porte que 20), cache pour la vie de
+  l'écran.
 
 `frontend-admin` les dépose à l'installation. `generate crud` les dépose s'ils manquent —
 projet installé avant cette version — et ne les écrase jamais ; ils paraissent au plan en
@@ -139,13 +165,19 @@ disparaît au profit du sélecteur ; la commande des commentaires porte
 le lecteur voie la syntaxe ; transcriptions recollées depuis les sorties réelles ; « Verify »
 cite l'email et le sélecteur.
 
+**Filtres** : `filter.rs` de tous les exemples est régénéré (`compare()` applique `in`), et
+`guides/filtering.md` documente `in` sur les colonnes comparables.
+
 **Documentation**, fr et en : `cli/generate.md` (grammaire et tableau des modificateurs),
 `guides/relations.md` (libellé, `label=`, replis), `guides/frontend.md` (sélecteur,
 résolution, compte non admin), `guides/auth.md` (la route, ses droits, et « Lister les
-comptes » pour un projet antérieur). `CHANGELOG.md`, section `[Unreleased]`.
+comptes » pour un projet antérieur). `CHANGELOG.md`, section `[Unreleased]` ; `crates/rbs-cli/notes/1.10.0.md` pour la rupture
+du §0 et le refus d'un noyau antérieur.
 
 ## 5. Vérifications
 
+- `rbs-core` : `in` lu sous ses deux formes, liste vide, schéma OpenAPI qui le décrit ;
+  `cargo test -p rbs-core --all-features`.
 - Unitaires : `label=` accepté et ses quatre refus ; déduction de la colonne libellé ;
   détection de `<table>_filter` ; rendu du patron avec référence, avec chacun des deux replis,
   et sans référence ; écran de démonstration inchangé ; route `users` rendue par la template
@@ -162,6 +194,7 @@ comptes » pour un projet antérieur). `CHANGELOG.md`, section `[Unreleased]`.
 
 ## Git
 
-Branche `feat/references-dans-les-ecrans`. Commits dans l'ordre : grammaire et déduction ;
+Branche `feat/references-dans-les-ecrans`. Commits dans l'ordre : `in` dans le noyau et le
+`filter.rs` engendré ; grammaire et déduction ;
 route `users` ; fichiers génériques et patron ; exemples ; documentation et tutoriel. Un seul
 push, à la fin.
