@@ -14,6 +14,7 @@ the site reads these files, and CI compiles them.
 | `newsletter-queue` | `jobs`, `mail` and `observability`: a broadcast route that enqueues one letter per confirmed subscriber, inside the transaction that reads them — and a `/metrics` listener of its own. |
 | `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` and `api-keys`: creating an order writes its audit entry and emits `order.created` inside the transaction that inserts it. |
 | `admin-console` | `cors` and `frontend-admin`: a Vue 3 application served by the binary itself — the public home page, the authenticated admin shell, and the `incidents` screens `rbs generate crud` emitted along with the entity. The only example built twice, in Rust and on the client. |
+| `help-desk` | `frontend-admin` and two tables, `tickets` and `commentaires`, the second referencing the first: the project the end-to-end tutorial builds, author taken from the token rather than the body. |
 
 They are not members of the root workspace — a generated project declares its own
 `[workspace]`, and Cargo forbids nesting. The root manifest excludes them and CI compiles
@@ -180,6 +181,61 @@ rustfmt would; execution order is untouched by that sort and stays the install o
 the `Migrator`'s `vec!`. `.github/workflows/ci.yml` and `Dockerfile` are read by no CI of
 this repository — GitHub only reads workflows at the root — and are kept here to be
 quoted by the documentation and to stay free of drift.
+
+### `help-desk`
+
+The project [Building a help desk](../docs/docs/tutorials/help-desk.md) walks through, command
+for command. One `add`, so one commit before it:
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new help-desk --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/help_desk' \
+  --lang fr
+cd help-desk
+git add -A && git commit -q -m "before frontend-admin"
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add frontend-admin
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud tickets \
+  --fields 'sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users' \
+  --force
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud commentaires \
+  --fields 'corps:text,ticket:references:tickets:cascade,auteur:references:users' \
+  --force
+cd .. && mv help-desk examples/help-desk
+```
+
+The two `generate crud` run in the order of the foreign key: `commentaires` references
+`tickets`, and the reverse order is refused before anything is written — the target has to
+exist in the project, and have a migration, for the constraint to point at it.
+
+Then the one edit the tutorial teaches, by hand: the author is read from the token rather
+than taken from the body. As generated, `auteur_id` sits in both input DTOs, so any
+signed-in caller writes in someone else's name.
+
+- `src/tickets/dto.rs`, `src/commentaires/dto.rs`: `auteur_id` leaves `Create…` and
+  `Update…`; the response keeps it.
+- `src/tickets/controller.rs`, `src/commentaires/controller.rs`: `create` reads
+  `identite.user_uuid()?` and hands it to the service.
+- `src/tickets/service.rs`, `src/commentaires/service.rs`: `create` takes the author as a
+  parameter; `update` no longer touches it.
+- `src/tickets/tests/auteur.rs`, declared in `src/tickets/tests/mod.rs`: two tests against
+  the database — a body naming another real account still creates the ticket in the
+  caller's name, and a `PATCH` naming someone else leaves the author in place.
+- `frontend/src/admin/vues/Tickets.vue`, `frontend/src/admin/vues/Commentaires.vue`: the
+  form no longer asks for an author; the list still shows it.
+
+`the_hand_edits_of_help_desk_are_in_place` holds all of them. The client comes last, once
+the edits are in, and no CI job regenerates it for this example — this command does:
+
+```bash
+cd examples/help-desk && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate client --lang ts --out frontend/src/api --force
+```
+
+The frontend is not built in CI either. After a local `npm install` in `frontend/`, delete
+`package-lock.json`, `node_modules/` and `dist/`: the drift test would name the lockfile.
 
 ## Edits the CLI does not produce
 

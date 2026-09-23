@@ -14,6 +14,7 @@ lit ces fichiers, et la CI les compile.
 | `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
 | `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` et `api-keys` : la création d'une commande écrit sa trace d'audit et émet `order.created` dans la transaction qui l'insère. |
 | `admin-console` | `cors` et `frontend-admin` : une application Vue 3 que le binaire sert lui-même — l'accueil public, le shell d'administration authentifié, et les écrans d'`incidents` qu'a émis `rbs generate crud` en même temps que l'entité. Le seul exemple construit deux fois, en Rust et côté client. |
+| `help-desk` | `frontend-admin` et deux tables, `tickets` et `commentaires`, la seconde référençant la première : le projet que construit le tutoriel de bout en bout, l'auteur lu dans le jeton plutôt que dans le corps. |
 
 Ils ne sont pas membres du workspace racine — un projet engendré déclare son propre
 `[workspace]`, et Cargo interdit l'imbrication. Le manifeste racine les exclut et la CI
@@ -180,6 +181,63 @@ d'exécution, lui, ne bouge pas à ce tri et reste l'ordre d'installation, dans 
 du `Migrator`. `.github/workflows/ci.yml` et `Dockerfile` ne sont lus par aucune CI de ce
 dépôt — GitHub ne lit les workflows qu'à la racine — et restent là pour être cités par la
 documentation et pour ne pas dériver.
+
+### `help-desk`
+
+Le projet que suit [Construire un gestionnaire de tickets](../docs/docs/tutorials/help-desk.md),
+commande pour commande. Un seul `add`, donc un seul commit avant lui :
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new help-desk --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/help_desk' \
+  --lang fr
+cd help-desk
+git add -A && git commit -q -m "before frontend-admin"
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add frontend-admin
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud tickets \
+  --fields 'sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users' \
+  --force
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud commentaires \
+  --fields 'corps:text,ticket:references:tickets:cascade,auteur:references:users' \
+  --force
+cd .. && mv help-desk examples/help-desk
+```
+
+Les deux `generate crud` s'enchaînent dans l'ordre de la clé étrangère : `commentaires`
+référence `tickets`, et l'ordre inverse est refusé avant toute écriture — la cible doit
+exister dans le projet, et avoir sa migration, pour que la contrainte la vise.
+
+Puis la seule retouche qu'enseigne le tutoriel, à la main : l'auteur est lu dans le jeton
+plutôt que pris dans le corps. Tel qu'engendré, `auteur_id` figure dans les deux DTO
+d'entrée, si bien que tout appelant connecté écrit au nom d'autrui.
+
+- `src/tickets/dto.rs`, `src/commentaires/dto.rs` : `auteur_id` quitte `Create…` et
+  `Update…` ; la réponse le garde.
+- `src/tickets/controller.rs`, `src/commentaires/controller.rs` : `create` lit
+  `identite.user_uuid()?` et le passe au service.
+- `src/tickets/service.rs`, `src/commentaires/service.rs` : `create` reçoit l'auteur en
+  paramètre ; `update` n'y touche plus.
+- `src/tickets/tests/auteur.rs`, déclaré dans `src/tickets/tests/mod.rs` : deux tests
+  contre la base — un corps qui nomme un autre compte réel crée pourtant le ticket au nom
+  de l'appelant, et un `PATCH` qui nomme autrui laisse l'auteur en place.
+- `frontend/src/admin/vues/Tickets.vue`, `frontend/src/admin/vues/Commentaires.vue` : le
+  formulaire ne demande plus d'auteur ; la liste l'affiche toujours.
+
+`the_hand_edits_of_help_desk_are_in_place` les garde toutes. Le client vient en dernier,
+une fois les retouches faites, et aucun job de CI ne le régénère pour cet exemple — c'est
+cette commande :
+
+```bash
+cd examples/help-desk && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate client --lang ts --out frontend/src/api --force
+```
+
+Le frontend n'est pas non plus construit en CI. Après un `npm install` local dans
+`frontend/`, supprimer `package-lock.json`, `node_modules/` et `dist/` : le test de
+non-dérive nommerait le lockfile.
 
 ## Les retouches que le CLI ne produit pas
 
