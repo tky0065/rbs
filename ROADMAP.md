@@ -236,6 +236,14 @@ une fois les deux en place.
 publiée ; la page « rbs et Loco » existe dans les deux langues, chaque affirmation sur
 Loco y étant datée et sourcée ; l'annonce est publiée après les deux, et son lien consigné.
 
+**Annonces publiées** — This Week in Rust ne prend plus les liens « Project/Tooling » que
+depuis r/rust ([décision du 2026-09](https://github.com/rust-lang/this-week-in-rust/issues/8575)) :
+le post Reddit vaut soumission, et une pull request n'y a plus sa place.
+
+| Date | Canal | Lien |
+|---|---|---|
+| 2026-09-23 | r/rust | https://www.reddit.com/r/rust/comments/1wo1tyi/rbs_190_an_axum_seaorm_scaffolder_whose_generated/ |
+
 ---
 
 ## Hors périmètre
