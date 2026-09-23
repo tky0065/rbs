@@ -1216,11 +1216,16 @@ fn the_hand_edits_of_help_desk_are_in_place() {
     for ecran in ["Tickets", "Commentaires"] {
         let vue = lire(&format!("frontend/src/admin/vues/{ecran}.vue"));
         // L'écran garde `REFERENCES.auteur_id` pour nommer l'auteur dans la liste : seul le
-        // sélecteur du formulaire, qui cherche parmi les comptes, trahit un champ revenu.
-        assert!(
-            !vue.contains("REFERENCES.auteur_id.chercher"),
-            "{ecran}.vue : le formulaire demande de nouveau un auteur que le serveur ignore"
-        );
+        // champ du formulaire trahit un auteur revenu. `champ-auteur_id` est l'identifiant
+        // de ce champ, sélecteur ou saisie d'identifiant si la référence se replie ;
+        // `REFERENCES.auteur_id.chercher`, la recherche que seul le sélecteur appelle.
+        for temoin in ["REFERENCES.auteur_id.chercher", "champ-auteur_id"] {
+            assert!(
+                !vue.contains(temoin),
+                "{ecran}.vue : le formulaire demande de nouveau un auteur que le serveur \
+                 ignore ({temoin})"
+            );
+        }
     }
 }
 
