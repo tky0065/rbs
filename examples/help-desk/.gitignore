@@ -1,0 +1,6 @@
+/target
+.env
+# <rbs:ignore>
+/frontend/node_modules/
+/frontend/dist/
+# </rbs:ignore>

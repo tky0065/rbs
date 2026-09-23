@@ -1,0 +1,169 @@
+import type { TokenPair, UserResponse } from '@/api/client'
+
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+
+import { api } from '@/api'
+import {
+  jetonRafraichissement,
+  poserJetonAcces,
+  poserJetonRafraichissement,
+} from '@/api/jetons'
+
+/**
+ * La marge prise sur l'expiration annoncée, en secondes.
+ *
+ * Le renouvellement part avant que le jeton ne meure, et non quand il est mort : entre
+ * les deux, il y a un aller-retour réseau, et une requête partie pendant ce temps
+ * repartirait avec un jeton périmé.
+ */
+const MARGE = 30
+
+/**
+ * La session de l'opérateur : ses jetons, son compte, et le renouvellement qui la tient
+ * ouverte.
+ *
+ * L'un des deux seuls stores de l'application. Une ressource métier n'en obtient jamais
+ * un à elle : elle passe par un composable au-dessus du client engendré, qui porte déjà
+ * ses types et ses chemins.
+ */
+export const useAuthentification = defineStore('authentification', () => {
+  const utilisateur = ref<UserResponse | null>(null)
+  const connecte = computed(() => utilisateur.value !== null)
+
+  // Un seul renouvellement à la fois, partagé par tous ceux qui l'attendent. Le fragment
+  // `auth` ne laisse consommer un jeton de rafraîchissement qu'une fois et traite le
+  // second usage comme un rejeu : il ferme alors toutes les sessions du compte. Deux
+  // appels concurrents déconnecteraient donc l'opérateur au lieu de le maintenir.
+  let enCours: Promise<boolean> | null = null
+  let echeance: ReturnType<typeof setTimeout> | null = null
+
+  function retenir(paire: TokenPair): void {
+    poserJetonAcces(paire.access_token)
+    poserJetonRafraichissement(paire.refresh_token)
+    programmer(paire.expires_in)
+  }
+
+  function oublier(): void {
+    poserJetonAcces(null)
+    poserJetonRafraichissement(null)
+    utilisateur.value = null
+
+    if (echeance !== null) {
+      clearTimeout(echeance)
+      echeance = null
+    }
+  }
+
+  // Le renouvellement part sur une échéance, et non sur un 401 rattrapé : le client
+  // engendré n'offre aucun point d'interception, et rejouer la requête après coup ferait
+  // hésiter l'écran là où l'opérateur ne doit rien voir.
+  function programmer(secondes: number): void {
+    if (echeance !== null) {
+      clearTimeout(echeance)
+    }
+
+    echeance = setTimeout(() => {
+      void renouveler()
+    }, Math.max(secondes - MARGE, 1) * 1000)
+  }
+
+  /** Ouvre une session contre `POST /auth/login`, puis lit le compte qu'elle désigne. */
+  async function connexion(email: string, motDePasse: string): Promise<void> {
+    retenir(await api.authLogin({ email, password: motDePasse }))
+    utilisateur.value = await api.authMe()
+  }
+
+  /** Échange le jeton de rafraîchissement contre une paire neuve. */
+  async function renouveler(): Promise<boolean> {
+    if (enCours !== null) {
+      return enCours
+    }
+
+    enCours = (async () => {
+      const jeton = jetonRafraichissement()
+
+      if (jeton === null) {
+        return false
+      }
+
+      try {
+        retenir(await api.authRefresh({ refresh_token: jeton }))
+        utilisateur.value = await api.authMe()
+
+        return true
+      } catch {
+        // Jeton expiré, révoqué, ou déjà consommé : la session est close côté serveur, et
+        // la garder ouverte ici ne ferait qu'échouer sur la requête suivante.
+        oublier()
+
+        return false
+      }
+    })()
+
+    try {
+      return await enCours
+    } finally {
+      enCours = null
+    }
+  }
+
+  /**
+   * Rend la session que le stockage porte, et ne rend la main qu'une fois la réponse là.
+   *
+   * C'est ce que la garde de route attend : trancher après avoir rendu l'écran le
+   * montrerait à moitié chargé avant de le remplacer par la connexion.
+   */
+  async function restaurer(): Promise<boolean> {
+    if (connecte.value) {
+      return true
+    }
+
+    if (jetonRafraichissement() === null) {
+      return false
+    }
+
+    return renouveler()
+  }
+
+  /**
+   * Change le mot de passe, et adopte la paire que le service réémet.
+   *
+   * Celui-ci ferme toutes les sessions du compte, celle de l'appelant comprise : rien ne
+   * relie un jeton d'accès à la ligne qui l'a émis, donc la sienne ne peut pas être
+   * épargnée. Il réémet aussitôt, et jeter cette paire déconnecterait au renouvellement
+   * suivant quelqu'un qui vient de faire exactement la bonne chose. C'est ici et non dans
+   * l'écran, parce que c'est la session que cela déplace.
+   */
+  async function changerMotDePasse(courant: string, nouveau: string): Promise<void> {
+    retenir(await api.authChangePassword({ current_password: courant, new_password: nouveau }))
+  }
+
+  /** Ferme la session ici et côté serveur. */
+  async function deconnexion(): Promise<void> {
+    const jeton = jetonRafraichissement()
+
+    // Révoquée côté serveur d'abord : oublier les jetons sans le dire laisserait la
+    // session ouverte jusqu'à son terme, et visible dans la liste des sessions du compte.
+    if (jeton !== null) {
+      try {
+        await api.authLogout({ refresh_token: jeton })
+      } catch {
+        // Le serveur ne connaît déjà plus cette session, ou ne répond pas : l'opérateur a
+        // demandé à sortir, et le lui refuser le laisserait connecté ici pour rien.
+      }
+    }
+
+    oublier()
+  }
+
+  return {
+    utilisateur,
+    connecte,
+    changerMotDePasse,
+    connexion,
+    deconnexion,
+    renouveler,
+    restaurer,
+  }
+})

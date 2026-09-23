@@ -203,6 +203,29 @@ const EXEMPLES: &[Exemple] = &[
         // qui répond de lui, en le régénérant puis en exigeant qu'il n'ait pas bougé.
         engendre_a_part: &["frontend/src/api/client.ts"],
     },
+    Exemple {
+        nom: "help-desk",
+        database_url: "postgres://rbs:rbs@localhost:5432/help_desk",
+        // `frontend-admin` tire `frontend` et `auth`, et par elle `mail` et `rate-limit`.
+        features: &["frontend-admin"],
+        // `commentaires` référence `tickets` : l'ordre est celui des clés étrangères, et
+        // l'inverse est refusé par le CLI avant d'écrire quoi que ce soit.
+        cruds: &[
+            (
+                "tickets",
+                "sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),\
+                 priorite:enum(basse,normale,haute),auteur:references:users",
+            ),
+            (
+                "commentaires",
+                "corps:text,ticket:references:tickets:cascade,auteur:references:users",
+            ),
+        ],
+        role: None,
+        with_upload: false,
+        edite_a_la_main: &[],
+        engendre_a_part: &[],
+    },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
@@ -242,6 +265,11 @@ fn admin_console_is_what_the_cli_produces_today() {
 #[test]
 fn event_hub_is_what_the_cli_produces_today() {
     assert_no_drift(example("event-hub"));
+}
+
+#[test]
+fn help_desk_is_what_the_cli_produces_today() {
+    assert_no_drift(example("help-desk"));
 }
 
 fn assert_no_drift(example: &Exemple) {

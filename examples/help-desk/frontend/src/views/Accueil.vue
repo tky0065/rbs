@@ -1,0 +1,389 @@
+<script setup lang="ts">
+import { CheckIcon, CopyIcon, RefreshCwIcon } from '@lucide/vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import Bande from '@/components/Bande.vue'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { TEXTES } from '@/views/accueil-textes'
+
+/** Le nom du projet, tel que `rbs new` l'a fixé. */
+const PROJET = 'help-desk'
+
+// L'adresse qui a servi cette page : le binaire une fois le client construit, le serveur
+// de développement sinon — et celui-ci relaie l'API. Un port écrit d'avance serait donc
+// faux la moitié du temps, et la commande affichée ne marcherait pas telle quelle.
+const ORIGINE = window.location.origin
+
+const COMMANDE = `curl -s ${ORIGINE}/health`
+
+/**
+ * Ce que rend la sonde du squelette : un verdict, et le détail par dépendance.
+ *
+ * Le contrat déclare la route mais pas son corps : le client engendré la rend donc
+ * `void`, alors que la réponse porte bien le verdict. La forme est affirmée ici, et ce
+ * type s'en ira le jour où le contrat la portera.
+ */
+type Sante = { status?: string; checks?: Record<string, string> }
+
+/** Une ligne du journal de la sonde. */
+type Releve = {
+  numero: number
+  heure: string
+  statut: string
+  detail: string
+  bon: boolean
+}
+
+// La sonde n'est pas un état, c'est un journal : chaque interrogation s'imprime sous la
+// précédente plutôt que d'effacer la dernière. Savoir que le service répond maintenant
+// vaut moins que voir à quel moment il a cessé de le faire.
+//
+// Les douze dernières lignes restent : un onglet laissé ouvert une journée en accumulerait
+// sinon des milliers, que personne ne remontera.
+const RELEVES_GARDES = 12
+const releves = ref<Releve[]>([])
+let imprimees = 0
+
+const CADENCE = 15_000
+
+// La sonde passe par le client engendré, comme tout appel de l'application : c'est ce qui
+// fait vérifier cet écran-ci contre le contrat à la compilation, là où un `fetch` écrit à
+// la main survivrait à la disparition de la route.
+//
+// Importé à l'usage et non en tête de fichier : le client porte une méthode par opération
+// du contrat, et un import statique depuis l'accueil — la seule route que le socle ne
+// charge pas paresseusement — le ferait descendre en entier chez le visiteur avant qu'il
+// n'ait rien demandé.
+//
+// Le statut ne se lit que sur une panne : le client ne rend que le corps d'une réponse
+// acceptée, et la sonde du squelette n'en rend qu'une.
+async function sonder() {
+  const { ApiError, api } = await import('@/api')
+
+  try {
+    imprime({ heure: maintenant(), statut: '200', detail: detaille(await api.health()), bon: true })
+  } catch (cause) {
+    imprime({
+      heure: maintenant(),
+      statut: cause instanceof ApiError ? String(cause.status) : '---',
+      detail: cause instanceof ApiError ? detaille(cause.body) : TEXTES.injoignable,
+      bon: false,
+    })
+  }
+}
+
+/** Le verdict et le détail par dépendance, tels que la ligne du journal les imprime. */
+function detaille(corps: unknown): string {
+  const sante = (typeof corps === 'object' && corps !== null ? corps : {}) as Sante
+  const controles = Object.entries(sante.checks ?? {})
+    .map(([nom, verdict]) => `${nom}=${verdict}`)
+    .join('  ')
+
+  return [`status=${sante.status ?? '?'}`, controles].filter(Boolean).join('  ')
+}
+
+// L'heure est celle de la réponse et non celle de la demande : deux interrogations
+// concurrentes s'imprimeraient sinon dans le désordre de leurs propres horodatages.
+function maintenant() {
+  return new Date().toTimeString().slice(0, 8)
+}
+
+function imprime(ligne: Omit<Releve, 'numero'>) {
+  imprimees += 1
+  const releve = { ...ligne, numero: imprimees }
+  releves.value = [...releves.value, releve].slice(-RELEVES_GARDES)
+}
+
+/** Ce que l'accueil lit du document OpenAPI : les routes, et de quoi les nommer. */
+type Operation = { summary?: string; operationId?: string }
+type DocumentOpenApi = { openapi?: string; paths?: Record<string, Record<string, Operation>> }
+
+/** Une route montée, telle que la table l'imprime. */
+type Route = { methode: string; chemin: string; operation: string }
+
+// Les seules clés d'un chemin à retenir : à côté de ses opérations, il peut porter
+// `parameters`, `summary` ou `$ref`, qui n'en sont pas.
+const METHODES = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']
+
+const DOCUMENT = '/api-docs/openapi.json'
+const INTERFACE = '/docs'
+
+const routes = ref<Route[]>([])
+
+/**
+ * Ce qu'une route de documentation a répondu.
+ *
+ * Quatre états et non deux, parce que « absent » et « injoignable » n'ont pas la même
+ * cause et que la page n'a pas le droit d'inventer celle qu'elle n'a pas vue : un
+ * service muet ne dit rien du fichier de configuration.
+ */
+type Verdict = 'attente' | 'servi' | 'coupe' | 'injoignable'
+
+const documentOpenApi = ref<Verdict>('attente')
+const interfaceOpenApi = ref<Verdict>('attente')
+
+const decompte = computed(() => {
+  const nombre = routes.value.length
+  return `${nombre} ${nombre > 1 ? TEXTES.routes_plusieurs : TEXTES.route_une}`
+})
+
+// Les deux clés de `[docs]` se coupent l'une sans l'autre, et le lecteur ne peut le
+// deviner : chacune est donc dite séparément. Une seule forme, parcourue, plutôt que deux
+// blocs jumeaux qu'une retouche laisserait diverger.
+const CIBLES = computed(() => [
+  {
+    libelle: TEXTES.interface_docs,
+    route: INTERFACE,
+    verdict: interfaceOpenApi.value,
+    absence:
+      interfaceOpenApi.value === 'coupe'
+        ? `${TEXTES.non_servi} — ${TEXTES.swagger_absent}`
+        : TEXTES.docs_muet,
+  },
+  {
+    libelle: TEXTES.document_docs,
+    route: DOCUMENT,
+    verdict: documentOpenApi.value,
+    absence:
+      documentOpenApi.value === 'coupe'
+        ? `${TEXTES.non_servi} — ${TEXTES.document_absent}`
+        : TEXTES.docs_muet,
+  },
+])
+
+/**
+ * Interroge une route de documentation, et ne conclut que de ce qu'elle a vu.
+ *
+ * Un 200 ne prouve rien : le binaire rend l'application pour toute route qu'il ne connaît
+ * pas, si bien qu'un drapeau coupé sous `[docs]` ferait répondre cette page-ci à la place
+ * de ce qu'on demandait. C'est donc la reconnaissance du corps, et elle seule, qui atteste
+ * la présence.
+ *
+ * Un échec ne prouve pas davantage. Un service qui ne répond pas ne dit rien de son
+ * fichier de configuration, et nommer là un drapeau qu'on n'a pas lu serait l'affirmation
+ * inventée que cette page s'interdit.
+ */
+async function interroge(
+  route: string,
+  reconnait: (reponse: Response) => Promise<boolean>,
+): Promise<Verdict> {
+  let reponse: Response
+  try {
+    reponse = await fetch(route)
+  } catch {
+    return 'injoignable'
+  }
+
+  if (!reponse.ok) {
+    return 'injoignable'
+  }
+
+  try {
+    return (await reconnait(reponse)) ? 'servi' : 'coupe'
+  } catch {
+    // Le service a répondu, mais pas ce qu'on demandait : c'est le repli qui a rendu
+    // l'application, donc le drapeau est coupé.
+    return 'coupe'
+  }
+}
+
+// La table n'est pas recopiée du squelette : elle sort du document que le service publie.
+// Recopiée, elle mentirait dès la première entité engendrée.
+async function lireLeDocument() {
+  documentOpenApi.value = await interroge(DOCUMENT, async (reponse) => {
+    const publie = (await reponse.json()) as DocumentOpenApi
+
+    // Ce qui atteste le document, c'est qu'il se déclare : `openapi` est le seul champ que
+    // la spécification impose. Le reconnaître à ses routes ferait passer pour « coupé » un
+    // document bien servi mais vide, ce qui est faux — et un projet qui n'annoterait
+    // aucune route est exactement le cas où le lecteur a besoin de la vérité.
+    if (typeof publie.openapi !== 'string') {
+      return false
+    }
+
+    routes.value = Object.entries(publie.paths ?? {})
+      .flatMap(([chemin, operations]) =>
+        Object.entries(operations)
+          .filter(([methode]) => METHODES.includes(methode))
+          .map(([methode, operation]) => ({
+            methode: methode.toUpperCase(),
+            chemin,
+            operation: operation.summary ?? operation.operationId ?? '',
+          })),
+      )
+      .sort(
+        (gauche, droite) =>
+          gauche.chemin.localeCompare(droite.chemin) ||
+          gauche.methode.localeCompare(droite.methode),
+      )
+    return true
+  })
+}
+
+async function sonderInterface() {
+  interfaceOpenApi.value = await interroge(INTERFACE, async (reponse) =>
+    (await reponse.text()).includes('swagger-ui'),
+  )
+}
+
+const copie = ref(false)
+let effacement: number | undefined
+
+async function copier() {
+  try {
+    await navigator.clipboard.writeText(COMMANDE)
+    copie.value = true
+    window.clearTimeout(effacement)
+    effacement = window.setTimeout(() => (copie.value = false), 2000)
+  } catch {
+    // Le presse-papier est refusé hors contexte sûr. La commande reste prise d'un clic :
+    // `select-all` la sélectionne en entier, et rien n'est perdu.
+    copie.value = false
+  }
+}
+
+let minuterie: number | undefined
+
+// Sonder réarme la cadence : sans cela une impression à la demande avancerait la minuterie
+// d'autant, et la ligne d'après tomberait presque aussitôt.
+function rythme() {
+  window.clearInterval(minuterie)
+  void sonder()
+  minuterie = window.setInterval(sonder, CADENCE)
+}
+
+onMounted(() => {
+  rythme()
+  void lireLeDocument()
+  void sonderInterface()
+})
+
+onUnmounted(() => {
+  window.clearInterval(minuterie)
+  window.clearTimeout(effacement)
+})
+</script>
+
+<!--
+  L'accueil, en sept bandes. Chacune porte son titre, son contenu et son rang dans
+  l'alternance, et se remplace sans qu'aucune autre bouge : c'est ce qui en fait une
+  vitrine plutôt qu'une page.
+
+  La gouttière de `feuille` porte la marge perforée du papier en continu ; les bandes,
+  elles, gardent leur propre fond.
+-->
+<template>
+  <main class="feuille mx-auto max-w-4xl border-x border-border px-4 sm:px-6">
+    <Bande>
+      <p class="mb-6 uppercase tracking-[0.35em] text-muted-foreground">{{ PROJET }}</p>
+      <h1 class="mb-4 text-3xl leading-[1.05] tracking-tight sm:text-5xl">{{ TEXTES.titre }}</h1>
+      <p class="text-muted-foreground">{{ TEXTES.sous_titre }}</p>
+    </Bande>
+
+    <Bande :titre="TEXTES.sonde">
+      <ol class="mb-6 space-y-1">
+        <li
+          v-for="releve in releves"
+          :key="releve.numero"
+          class="flex flex-wrap gap-x-3 motion-safe:animate-impression"
+        >
+          <span class="text-muted-foreground">{{ releve.heure }}</span>
+          <span>GET /health</span>
+          <span :class="releve.bon ? '' : 'text-destructive'">{{ releve.statut }}</span>
+          <span :class="releve.bon ? '' : 'text-destructive'">{{ releve.detail }}</span>
+        </li>
+        <li v-if="releves.length === 0" class="text-muted-foreground">
+          {{ TEXTES.journal_vide }}
+        </li>
+      </ol>
+
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <Button variant="outline" @click="rythme">
+          <RefreshCwIcon aria-hidden="true" />
+          {{ TEXTES.reimprimer }}
+        </Button>
+        <p class="text-muted-foreground">{{ TEXTES.cadence }}</p>
+      </div>
+    </Bande>
+
+    <Bande :titre="TEXTES.essai">
+      <div class="mb-5 flex flex-wrap items-center gap-4">
+        <code
+          class="border border-border bg-card px-2 py-1 break-words select-all"
+        >{{ COMMANDE }}</code>
+        <Button variant="outline" @click="copier">
+          <CheckIcon v-if="copie" aria-hidden="true" />
+          <CopyIcon v-else aria-hidden="true" />
+          {{ copie ? TEXTES.copie : TEXTES.copier }}
+        </Button>
+      </div>
+      <p class="text-muted-foreground">{{ TEXTES.essai_note }}</p>
+    </Bande>
+
+    <Bande :titre="TEXTES.routes">
+      <Table class="mb-5">
+        <TableHeader>
+          <TableRow>
+            <TableHead>{{ TEXTES.methode }}</TableHead>
+            <TableHead>{{ TEXTES.chemin }}</TableHead>
+            <TableHead>{{ TEXTES.operation }}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="route in routes" :key="route.methode + route.chemin">
+            <TableCell>{{ route.methode }}</TableCell>
+            <TableCell>{{ route.chemin }}</TableCell>
+            <TableCell class="text-muted-foreground">{{ route.operation }}</TableCell>
+          </TableRow>
+          <TableEmpty v-if="routes.length === 0" :colspan="3" class="whitespace-normal">
+            {{ TEXTES.routes_vides[documentOpenApi] }}
+          </TableEmpty>
+        </TableBody>
+      </Table>
+      <p v-if="documentOpenApi === 'servi'" class="text-muted-foreground">
+        {{ decompte }} — {{ TEXTES.routes_source }}
+      </p>
+    </Bande>
+
+    <Bande :titre="TEXTES.documentation">
+      <dl class="grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(10rem,auto)_1fr]">
+        <template v-for="cible in CIBLES" :key="cible.route">
+          <dt class="text-muted-foreground max-sm:not-first:mt-3">{{ cible.libelle }}</dt>
+          <dd class="m-0">
+            <a
+              v-if="cible.verdict === 'servi'"
+              :href="cible.route"
+              class="break-all underline underline-offset-4"
+            >
+              {{ cible.route }}
+            </a>
+            <span v-else-if="cible.verdict === 'attente'" class="text-muted-foreground">
+              {{ TEXTES.attente }}
+            </span>
+            <span v-else class="text-destructive">{{ cible.absence }}</span>
+          </dd>
+        </template>
+      </dl>
+    </Bande>
+
+    <Bande :titre="TEXTES.composants">
+      <p class="mb-4 text-muted-foreground">{{ TEXTES.galerie_note }}</p>
+      <RouterLink to="/galerie" class="underline underline-offset-4">{{ TEXTES.galerie }}</RouterLink>
+    </Bande>
+
+    <Bande>
+      <p class="text-muted-foreground">{{ TEXTES.pied_fichier }}</p>
+      <p class="text-muted-foreground">{{ TEXTES.pied_bandes }}</p>
+    </Bande>
+  </main>
+</template>

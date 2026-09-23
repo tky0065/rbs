@@ -1,0 +1,214 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+
+import { ApiError, api, phrase } from '@/api'
+import Bande from '@/components/Bande.vue'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useAuthentification } from '@/stores/authentification'
+
+import { TEXTES } from '../textes'
+
+/** Le nom du projet, tel que `rbs new` l'a fixé. */
+const PROJET = 'help-desk'
+
+const authentification = useAuthentification()
+const route = useRoute()
+const routeur = useRouter()
+
+const adresse = ref('')
+const motDePasse = ref('')
+const faute = ref<string | null>(null)
+const enCours = ref(false)
+
+// Faux tant que le service n'a rien dit : l'écran n'offre pas un chemin dont il ignore
+// l'état, et une inscription fermée n'a pas de lien qui y mène.
+const inscriptionOuverte = ref(false)
+
+const oubliOuvert = ref(false)
+const oubliAdresse = ref('')
+const oubliEnCours = ref(false)
+const oubliFaute = ref<string | null>(null)
+const envoye = ref(false)
+
+async function entrer(): Promise<void> {
+  enCours.value = true
+  faute.value = null
+
+  try {
+    await authentification.connexion(adresse.value, motDePasse.value)
+    // La route que la garde avait interrompue, ou l'espace lui-même : l'opérateur reprend
+    // là où il allait plutôt que sur un écran qu'il n'a pas demandé.
+    await routeur.replace(suite())
+  } catch (cause) {
+    faute.value = raison(cause)
+  } finally {
+    enCours.value = false
+  }
+}
+
+async function demander(): Promise<void> {
+  oubliEnCours.value = true
+  oubliFaute.value = null
+
+  try {
+    await api.authForgotPassword({ email: oubliAdresse.value })
+    oubliOuvert.value = false
+    oubliAdresse.value = ''
+    faute.value = null
+    envoye.value = true
+  } catch (cause) {
+    oubliFaute.value = phrase(cause, TEXTES.injoignable)
+  } finally {
+    oubliEnCours.value = false
+  }
+}
+
+/**
+ * Demande au service si l'inscription est ouverte.
+ *
+ * Le réglage est lu par le serveur à son démarrage, et une application servie en fichiers
+ * statiques n'a que cette route pour le connaître. Son échec n'a rien à annoncer : il
+ * laisse le lien absent, et la connexion, elle, marche toujours.
+ */
+async function lireInscription(): Promise<void> {
+  try {
+    inscriptionOuverte.value = (await api.authRegistrationStatus()).enabled
+  } catch {
+    inscriptionOuverte.value = false
+  }
+}
+
+/** La route à rejoindre une fois entré. */
+function suite(): string {
+  const demandee = route.query.suite
+
+  return typeof demandee === 'string' && demandee.startsWith('/admin') ? demandee : '/admin'
+}
+
+/**
+ * Ce qui s'affiche quand la connexion échoue.
+ *
+ * Un 401 est le seul cas où le service se tait volontairement : il ne dit ni si l'adresse
+ * existe, ni lequel des deux champs est faux, et recopier son message n'apprendrait rien.
+ * Tout le reste — un champ refusé, un service tombé — porte sa propre phrase, qui est
+ * celle qu'il faut lire.
+ */
+function raison(cause: unknown): string {
+  if (cause instanceof ApiError && cause.status === 401) {
+    return TEXTES.refuse
+  }
+
+  return phrase(cause, TEXTES.injoignable)
+}
+
+onMounted(() => {
+  void lireInscription()
+})
+</script>
+
+<template>
+  <main class="mx-auto flex min-h-screen max-w-xl flex-col justify-center border-x border-border">
+    <Bande>
+      <p class="mb-6 uppercase tracking-[0.35em] text-muted-foreground">{{ PROJET }}</p>
+      <h1 class="mb-4 text-3xl leading-tight">{{ TEXTES.connexion }}</h1>
+      <p class="text-muted-foreground">{{ TEXTES.connexion_sous_titre }}</p>
+    </Bande>
+
+    <Bande>
+      <form class="flex flex-col gap-5" novalidate @submit.prevent="entrer">
+        <div class="flex flex-col gap-2">
+          <Label for="adresse">{{ TEXTES.adresse }}</Label>
+          <Input
+            id="adresse"
+            v-model="adresse"
+            type="email"
+            name="email"
+            autocomplete="username"
+            required
+          />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <Label for="mot-de-passe">{{ TEXTES.mot_de_passe }}</Label>
+          <Input
+            id="mot-de-passe"
+            v-model="motDePasse"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <!-- Annoncé plutôt qu'affiché seul : l'opérateur qui n'a pas quitté le champ du
+             mot de passe ne verrait rien apparaître. -->
+        <p v-if="faute" class="text-destructive" role="alert">{{ faute }}</p>
+        <p v-else-if="envoye" class="text-muted-foreground" role="status">
+          {{ TEXTES.envoye }}
+        </p>
+
+        <div class="flex items-center justify-between gap-4">
+          <Button type="submit" :disabled="enCours">
+            {{ enCours ? TEXTES.entree_en_cours : TEXTES.entrer }}
+          </Button>
+
+          <Dialog v-model:open="oubliOuvert">
+            <DialogTrigger as-child>
+              <Button type="button" variant="link" class="px-0 underline underline-offset-4">
+                {{ TEXTES.oubli }}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{{ TEXTES.oubli_titre }}</DialogTitle>
+                <DialogDescription>{{ TEXTES.oubli_detail }}</DialogDescription>
+              </DialogHeader>
+
+              <form id="oubli" class="flex flex-col gap-2" novalidate @submit.prevent="demander">
+                <Label for="oubli-adresse">{{ TEXTES.adresse }}</Label>
+                <Input
+                  id="oubli-adresse"
+                  v-model="oubliAdresse"
+                  type="email"
+                  autocomplete="username"
+                  required
+                />
+                <p v-if="oubliFaute" class="text-destructive" role="alert">{{ oubliFaute }}</p>
+              </form>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" @click="oubliOuvert = false">
+                  {{ TEXTES.annuler }}
+                </Button>
+                <Button type="submit" form="oubli" :disabled="oubliEnCours">
+                  {{ oubliEnCours ? TEXTES.envoi_en_cours : TEXTES.envoyer }}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </form>
+    </Bande>
+
+    <Bande v-if="inscriptionOuverte">
+      <RouterLink
+        :to="{ name: 'admin-inscription' }"
+        class="underline underline-offset-4 hover:text-foreground"
+      >
+        {{ TEXTES.inscription_lien }}
+      </RouterLink>
+    </Bande>
+  </main>
+</template>

@@ -1,0 +1,219 @@
+use chrono::{Duration, Utc};
+use rbs_core::config::AuthConfig;
+use rbs_core::{Error, Result, hash, token};
+use sea_orm::prelude::Uuid;
+use sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
+
+use super::super::config::FlowConfig;
+use super::super::dto::{ChangePasswordRequest, ResetPasswordRequest, TokenPair};
+use super::super::model::TokenPurpose;
+use super::super::repository;
+use super::{close_every_session, detach, issue, normalise, notify};
+use crate::modules::mail::Mailer;
+
+/// Change le mot de passe d'un compte identifié, et rend une paire neuve.
+///
+/// Toutes les sessions tombent, celle de l'appelant comprise : la requête porte un jeton
+/// d'accès, et rien ne le relie à la ligne qui l'a émis — la session courante ne peut pas
+/// être épargnée faute d'être identifiable. Plutôt que de déconnecter quelqu'un qui vient
+/// de faire la bonne chose, on révoque puis on réémet.
+pub async fn change(
+    db: &DatabaseConnection,
+    auth: &AuthConfig,
+    user_id: Uuid,
+    input: ChangePasswordRequest,
+) -> Result<TokenPair> {
+    let utilisateur = repository::find(db, user_id)
+        .await?
+        // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton invalide.
+        .ok_or(Error::Unauthorized)?;
+
+    // `Forbidden` et non `Unauthorized` : l'appelant est identifié, son Bearer est bon.
+    // Un 401 lui dirait que son jeton est mort, et son client tenterait un
+    // rafraîchissement qui ne réglerait rien.
+    if !hash::verify_password(&input.current_password, &utilisateur.password_hash)? {
+        return Err(Error::Forbidden);
+    }
+
+    let nouveau = hash::hash_password(&input.new_password)?;
+
+    // Tout ou rien : un mot de passe changé dont les sessions resteraient ouvertes
+    // laisserait tourner celles d'un compte que ce changement vient peut-être de
+    // reprendre. Le hachage est fait avant : Argon2 coûte des dizaines de millisecondes,
+    // et un verrou d'écriture ne se tient pas pendant un calcul.
+    let transaction = db.begin().await?;
+
+    repository::user::set_password(&transaction, user_id, &nouveau).await?;
+
+    // Une boîte compromise a pu recevoir une demande de réinitialisation d'un attaquant
+    // avant que son titulaire ne s'en aperçoive et ne change ici son mot de passe pour
+    // reprendre la main : laisser ce lien-là vivant jusqu'à son terme le rendrait à
+    // l'attaquant malgré le geste qui devait l'en priver. C'est le scénario que ce champ
+    // existe déjà pour fermer à l'émission d'un nouveau jeton ; il vaut tout autant ici.
+    repository::one_time_token::invalidate_pending(
+        &transaction,
+        user_id,
+        TokenPurpose::PasswordReset,
+    )
+    .await?;
+
+    let fermees = close_every_session(&transaction, user_id).await?;
+
+    // Rechargé : `issue` lit l'estampille que la fermeture vient de poser, et n'émettrait
+    // sinon qu'un jeton né dans la seconde qu'elle vient de tuer.
+    let utilisateur = repository::find(&transaction, user_id)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    let paire = issue(&transaction, auth, &utilisateur).await?;
+    transaction.commit().await?;
+
+    // Ni l'adresse ni les jetons : l'identifiant du compte suffit à retrouver ce qui s'est
+    // passé, et le journal ne porte pas ce que la réponse tait.
+    tracing::info!(
+        user_id = %user_id,
+        sessions_revoquees = fermees,
+        "mot de passe changé : les sessions du compte sont révoquées"
+    );
+
+    Ok(paire)
+}
+
+/// Ouvre un jeton de réinitialisation pour un compte, et le rend **en clair**.
+///
+/// Le jeton en clair ne se relit nulle part : la base n'en garde que l'empreinte. Le
+/// rendre ici est ce qui permet à `send_reset_link` de le mettre dans un courriel — et
+/// aux tests du projet de dérouler le parcours entier sans qu'aucun SMTP soit joignable.
+///
+/// Les jetons échus de tous les comptes partent d'abord : l'émission est le moment où la
+/// table grossit, et y purger la borne sans tâche périodique.
+pub async fn open_reset(
+    db: &impl ConnectionTrait,
+    ttl_secs: u64,
+    utilisateur: &repository::Model,
+) -> Result<String> {
+    repository::one_time_token::purge_expired(db).await?;
+    repository::one_time_token::invalidate_pending(db, utilisateur.id, TokenPurpose::PasswordReset)
+        .await?;
+
+    let jeton = token::random();
+    repository::one_time_token::issue(
+        db,
+        utilisateur.id,
+        TokenPurpose::PasswordReset,
+        token::fingerprint(&jeton),
+        (Utc::now() + Duration::seconds(ttl_secs as i64)).fixed_offset(),
+    )
+    .await?;
+
+    Ok(jeton)
+}
+
+/// `open_reset` pour le compte qui porte l'adresse, rendu avec le jeton.
+///
+/// `None` quand aucun compte ne porte l'adresse. Les routes ne passent pas par ici : elles
+/// lisent le compte et détachent `open_reset`. Les tests s'en servent pour tenir le jeton.
+pub async fn request_reset(
+    db: &DatabaseConnection,
+    ttl_secs: u64,
+    email: &str,
+) -> Result<Option<(repository::Model, String)>> {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
+        return Ok(None);
+    };
+
+    let jeton = open_reset(db, ttl_secs, &utilisateur).await?;
+
+    Ok(Some((utilisateur, jeton)))
+}
+
+/// Envoie un lien de réinitialisation neuf, si un compte porte l'adresse.
+///
+/// Seule la lecture du compte est attendue : l'émission et le courriel partent détachés,
+/// et une adresse inconnue répond dans le même temps qu'une adresse inscrite.
+pub async fn send_reset_link(
+    db: &DatabaseConnection,
+    mail: &Mailer,
+    flows: &FlowConfig,
+    email: &str,
+) -> Result<()> {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
+        return Ok(());
+    };
+
+    let (db, mail, flows) = (db.clone(), mail.clone(), flows.clone());
+    detach(utilisateur.id, "réinitialisation", async move {
+        let jeton = open_reset(&db, flows.reset_ttl_secs, &utilisateur).await?;
+        notify(
+            &mail,
+            &utilisateur,
+            "Réinitialisation de votre mot de passe",
+            "reinitialisation.html",
+            minijinja::context! {
+                link => flows.link("reset-password", &jeton),
+                heures => flows.reset_ttl_secs / 3600,
+            },
+        );
+
+        Ok(())
+    });
+
+    Ok(())
+}
+
+/// Consomme un jeton et pose le nouveau mot de passe.
+///
+/// Toutes les sessions tombent : on ne sait pas si le compte avait été pris, et les
+/// laisser tourner reviendrait à valider la prise.
+pub async fn reset(db: &DatabaseConnection, input: ResetPasswordRequest) -> Result<()> {
+    let fingerprint = token::fingerprint(&input.token);
+
+    // Jeton inconnu, périmé ou déjà consommé : la même erreur pour les trois. Les
+    // distinguer renseignerait sur l'état des demandes en cours.
+    let ligne = repository::one_time_token::find(db, &fingerprint, TokenPurpose::PasswordReset)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    let nouveau = hash::hash_password(&input.new_password)?;
+
+    // Tout ou rien : un jeton consommé sans que le mot de passe suive serait brûlé pour
+    // rien, et l'utilisateur devrait en redemander un. Le hachage est fait avant, comme
+    // dans `change`.
+    let transaction = db.begin().await?;
+
+    // Rien ici ne relit `consumed_at` ni `expires_at` : c'est `consume` qui porte les deux
+    // conditions, et elle seule peut les porter sans laisser passer deux
+    // réinitialisations concurrentes.
+    if !repository::one_time_token::consume(&transaction, ligne.id).await? {
+        return Err(Error::Unauthorized);
+    }
+
+    repository::user::set_password(&transaction, ligne.user_id, &nouveau).await?;
+
+    // Le jeton consommé prouve la boîte aux lettres autant qu'un lien de vérification :
+    // il y est arrivé de la même façon. Sans cela, un compte jamais vérifié qui passe par
+    // `forgot-password` retrouverait, avec son nouveau mot de passe, le 401 qui l'y a
+    // mené. `mark_verified` ne réécrit pas la date d'une adresse déjà vérifiée.
+    repository::user::mark_verified(&transaction, ligne.user_id).await?;
+
+    // Symétrique à `change` : un mot de passe qui vient d'être posé rend caducs les
+    // autres liens de réinitialisation en attente, plutôt que d'en laisser un survivre à
+    // côté du mot de passe qu'il prétendait remplacer.
+    repository::one_time_token::invalidate_pending(
+        &transaction,
+        ligne.user_id,
+        TokenPurpose::PasswordReset,
+    )
+    .await?;
+
+    let fermees = close_every_session(&transaction, ligne.user_id).await?;
+    transaction.commit().await?;
+
+    tracing::info!(
+        user_id = %ligne.user_id,
+        sessions_revoquees = fermees,
+        "mot de passe réinitialisé : les sessions du compte sont révoquées"
+    );
+
+    Ok(())
+}
