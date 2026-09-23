@@ -55,6 +55,8 @@ macro_rules! comparaison_documentee {
             pub lt: Option<$valeur>,
             /// Inférieur ou égal.
             pub lte: Option<$valeur>,
+            /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
+            pub r#in: Option<Vec<$valeur>>,
             /// `true` exige une colonne nulle, `false` une colonne renseignée.
             pub is_null: Option<bool>,
         }
@@ -323,19 +325,27 @@ mod tests {
         for (schema, operateurs) in [
             (
                 schema::<BoolComparisonOperators>(),
-                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
             ),
             (
                 schema::<DateTimeComparisonOperators>(),
-                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
             ),
             (
                 schema::<DateComparisonOperators>(),
-                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
             ),
             (
                 schema::<DecimalComparisonOperators>(),
-                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
+            ),
+            (
+                schema::<UuidComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
+            ),
+            (
+                schema::<IntComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "in", "is_null"],
             ),
             (
                 schema::<TextMatchOperators>(),

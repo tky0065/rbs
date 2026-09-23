@@ -33,6 +33,8 @@ pub struct Comparison<T> {
     pub lt: Option<T>,
     /// Inférieur ou égal.
     pub lte: Option<T>,
+    /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
+    pub r#in: Option<Vec<T>>,
     /// `true` exige une colonne nulle, `false` une colonne renseignée.
     pub is_null: Option<bool>,
 }
@@ -111,6 +113,7 @@ struct ComparisonInput<T> {
     gte: Option<T>,
     lt: Option<T>,
     lte: Option<T>,
+    r#in: Option<Vec<T>>,
     is_null: Option<bool>,
 }
 
@@ -138,6 +141,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Comparison<T> {
                     gte: None,
                     lt: None,
                     lte: None,
+                    r#in: None,
                     is_null: None,
                 },
                 Forme::Operators(operateurs) => Self {
@@ -146,6 +150,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Comparison<T> {
                     gte: operateurs.gte,
                     lt: operateurs.lt,
                     lte: operateurs.lte,
+                    r#in: operateurs.r#in,
                     is_null: operateurs.is_null,
                 },
             },
@@ -236,6 +241,34 @@ mod tests {
         assert_eq!(compare.gte, Some(10));
         assert_eq!(compare.lt, Some(100));
         assert_eq!(compare.eq, None);
+    }
+
+    /// `in` vaut sur une colonne comparable comme sur une énumération : c'est ce qui laisse
+    /// un écran résoudre les identifiants d'une page entière en un seul appel.
+    #[test]
+    fn a_comparison_object_names_in() {
+        let compare: Comparison<i32> =
+            serde_json::from_str(r#"{"in": [1, 2]}"#).expect("objet lisible");
+
+        assert_eq!(compare.r#in, Some(vec![1, 2]));
+        assert_eq!(compare.eq, None);
+    }
+
+    /// Une liste vide reste une liste : le filtre engendré n'accepte alors aucune ligne,
+    /// là où `None` n'en écarterait aucune.
+    #[test]
+    fn an_empty_in_list_on_a_comparison_stays_an_empty_list() {
+        let compare: Comparison<i32> =
+            serde_json::from_str(r#"{"in": []}"#).expect("objet lisible");
+
+        assert_eq!(compare.r#in, Some(Vec::new()));
+    }
+
+    #[test]
+    fn a_bare_comparison_value_carries_no_in_list() {
+        let compare: Comparison<i32> = serde_json::from_str("7").expect("valeur nue lisible");
+
+        assert_eq!(compare.r#in, None);
     }
 
     #[test]
