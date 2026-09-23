@@ -105,28 +105,24 @@ interface Ligne {
 interface Formulaire {
   corps: string
   ticket_id: string
-  auteur_id: string
 }
 
 /** Un formulaire vierge : ce qu'ouvre la création. */
 const VIERGE: Formulaire = {
   corps: '',
   ticket_id: '',
-  auteur_id: '',
 }
 
 /**
  * Ce que la source reçoit, tiré de ce que le formulaire porte.
  *
- * Un champ laissé vide vaut l'absence de valeur et non la chaîne vide : c'est la seule
- * lecture qui laisse remettre à zéro une colonne facultative depuis le formulaire. Un
- * instant repart au fuseau que le contrat attend, et que le contrôle natif ne porte pas.
+ * L'auteur n'y est pas : le serveur le lit dans le jeton, et un champ envoyé en plus serait
+ * jeté sans un mot — rien ne le typant ici, rien ne l'aurait signalé.
  */
 function corps(formulaire: Formulaire) {
   return {
     corps: formulaire.corps,
     ticket_id: formulaire.ticket_id,
-    auteur_id: formulaire.auteur_id,
   }
 }
 
@@ -135,7 +131,6 @@ function saisie(ligne: Ligne): Formulaire {
   return {
     corps: ligne.corps,
     ticket_id: ligne.ticket_id,
-    auteur_id: ligne.auteur_id,
   }
 }
 
@@ -542,16 +537,6 @@ function afficher(valeur: string | number | boolean | null, rendu: Rendu): strin
               :model-value="valeurs.ticket_id"
               required
               @update:model-value="(valeur) => (valeurs.ticket_id = String(valeur))"
-            />
-          </div>
-          <div class="flex flex-col gap-2">
-            <Label for="champ-auteur_id">Auteur id</Label>
-            <Input
-              id="champ-auteur_id"
-              type="text"
-              :model-value="valeurs.auteur_id"
-              required
-              @update:model-value="(valeur) => (valeurs.auteur_id = String(valeur))"
             />
           </div>
 

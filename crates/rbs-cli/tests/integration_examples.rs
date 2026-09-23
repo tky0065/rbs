@@ -234,8 +234,13 @@ const EXEMPLES: &[Exemple] = &[
             "src/commentaires/dto.rs",
             "src/commentaires/service.rs",
             "src/commentaires/controller.rs",
+            "frontend/src/admin/vues/Tickets.vue",
+            "frontend/src/admin/vues/Commentaires.vue",
         ],
-        engendre_a_part: &[],
+        // Le client typé que les écrans importent. Le rejeu ne lance pas la commande qui
+        // l'écrit — elle compile le projet — et aucun job ne le régénère pour celui-ci :
+        // `examples/README.md` donne la commande qui le refait.
+        engendre_a_part: &["frontend/src/api/client.ts"],
     },
 ];
 
@@ -1207,6 +1212,14 @@ fn the_hand_edits_of_help_desk_are_in_place() {
         lire("src/tickets/tests/mod.rs").contains("mod auteur;"),
         "`auteur.rs` n'est plus déclaré : ses tests ne compileraient plus"
     );
+
+    for ecran in ["Tickets", "Commentaires"] {
+        let vue = lire(&format!("frontend/src/admin/vues/{ecran}.vue"));
+        assert!(
+            !vue.contains("champ-auteur_id"),
+            "{ecran}.vue : le formulaire demande de nouveau un auteur que le serveur ignore"
+        );
+    }
 }
 
 /// Ce que `rbs generate client` a déposé dans `admin-console`, et que la comparaison exclut.

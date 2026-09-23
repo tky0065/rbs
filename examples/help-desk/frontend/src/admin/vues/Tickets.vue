@@ -116,7 +116,6 @@ interface Formulaire {
   detail: string
   statut: string
   priorite: string
-  auteur_id: string
 }
 
 /** Un formulaire vierge : ce qu'ouvre la création. */
@@ -125,15 +124,14 @@ const VIERGE: Formulaire = {
   detail: '',
   statut: 'ouvert',
   priorite: 'basse',
-  auteur_id: '',
 }
 
+// region: corps
 /**
  * Ce que la source reçoit, tiré de ce que le formulaire porte.
  *
- * Un champ laissé vide vaut l'absence de valeur et non la chaîne vide : c'est la seule
- * lecture qui laisse remettre à zéro une colonne facultative depuis le formulaire. Un
- * instant repart au fuseau que le contrat attend, et que le contrôle natif ne porte pas.
+ * L'auteur n'y est pas : le serveur le lit dans le jeton, et un champ envoyé en plus serait
+ * jeté sans un mot — rien ne le typant ici, rien ne l'aurait signalé.
  */
 function corps(formulaire: Formulaire) {
   return {
@@ -141,9 +139,9 @@ function corps(formulaire: Formulaire) {
     detail: formulaire.detail,
     statut: formulaire.statut as 'ouvert' | 'en_cours' | 'resolu' | 'ferme',
     priorite: formulaire.priorite as 'basse' | 'normale' | 'haute',
-    auteur_id: formulaire.auteur_id,
   }
 }
+// endregion: corps
 
 /** Le formulaire prérempli d'une ligne existante. */
 function saisie(ligne: Ligne): Formulaire {
@@ -152,7 +150,6 @@ function saisie(ligne: Ligne): Formulaire {
     detail: ligne.detail,
     statut: ligne.statut,
     priorite: ligne.priorite,
-    auteur_id: ligne.auteur_id,
   }
 }
 
@@ -599,16 +596,6 @@ function afficher(valeur: string | number | boolean | null, rendu: Rendu): strin
                 <SelectItem value="haute">haute</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div class="flex flex-col gap-2">
-            <Label for="champ-auteur_id">Auteur id</Label>
-            <Input
-              id="champ-auteur_id"
-              type="text"
-              :model-value="valeurs.auteur_id"
-              required
-              @update:model-value="(valeur) => (valeurs.auteur_id = String(valeur))"
-            />
           </div>
 
           <p v-if="fauteFormulaire" class="text-destructive" role="alert">
