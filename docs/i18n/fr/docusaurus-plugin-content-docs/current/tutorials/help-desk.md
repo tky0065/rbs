@@ -31,8 +31,10 @@ git add -A && git commit -q -m "projet neuf"
 rbs add frontend-admin
 ```
 
-`add` refuse d'écrire dans un working tree sale, et `rbs new` initialise le dépôt sans
-rien commiter — d'où le commit qui le précède. Le plan est long ; ses lignes de fichiers
+`rbs new` initialise le dépôt sans rien commiter. Le commit n'est pas exigé ici — `add`
+ne refuse que les modifications non commitées de fichiers que Git suit déjà, et rien
+n'est encore suivi —, mais il donne une base propre à chaque étape qui suit, si bien que
+`git diff` montre exactement ce que chaque commande a écrit. Le plan est long ; ses lignes de fichiers
 sont coupées ci-dessous, et il en reste la tête et la queue.
 
 {/* rbs:transcript cmd="rbs add frontend-admin" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
@@ -65,8 +67,9 @@ rbs generate crud tickets \
   --fields "sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users"
 ```
 
-`generate` refuse lui aussi un arbre sale : chaque étape de cette page commence donc par
-un commit.
+Dès lors, les commits sont exigés : `generate` refuse d'écrire tant que des fichiers
+suivis portent des modifications non commitées, si bien que chaque étape de cette page en
+commence par un.
 
 {/* rbs:transcript cmd="rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
 ```text
@@ -106,8 +109,8 @@ section 4 est celle qui comble ce manque.
 ## 3. Y accrocher des commentaires
 
 Un commentaire appartient à un ticket : `commentaires` référence donc `tickets`. L'ordre
-des deux commandes est celui de la clé étrangère, et le CLI l'impose. Lancez la seconde
-en premier, et rien n'est écrit :
+des deux commandes est celui de la clé étrangère, et le CLI l'impose. Eussiez-vous lancé
+la seconde avant que `tickets` n'existe, rien n'aurait été écrit :
 
 {/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade,auteur:references:users --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
 ```text
@@ -183,8 +186,10 @@ git add -A && git commit -q -m "l'auteur est lu dans le jeton"
 
 ## 5. Porter le changement jusqu'à l'écran
 
-Les écrans appellent l'API par un client typé, engendré depuis le document OpenAPI du
-serveur. Le contrat vient de changer : régénérez-le.
+Les écrans appellent l'API par un client typé, et `frontend-admin` ne le livre pas : il
+est engendré depuis le document OpenAPI de *votre* projet, et les écrans — `Tickets.vue`
+compris — l'importent, si bien que le frontend ne se construit pas tant qu'il n'existe
+pas. Engendrez-le maintenant que le contrat est fixé :
 
 ```bash
 rbs generate client --lang ts --out frontend/src/api
@@ -200,8 +205,9 @@ plan pour …/help-desk
 ✓ client engendré — frontend/src/api/client.ts porte 29 opérations
 ```
 
-`CreateTicket`, dans `client.ts`, n'a plus d'`auteur_id`. On s'attendrait à ce que
-l'écran cesse de passer la vérification des types, puisqu'il envoie encore ce champ. Il
+`CreateTicket`, dans `client.ts`, n'a pas d'`auteur_id` : le client a été lu dans le
+contrat tel que la section 4 l'a laissé. On s'attendrait à ce que l'écran échoue à la
+vérification des types, puisqu'il envoie encore ce champ. Il
 n'en est rien : `npm run typecheck` passe. La fonction qui construit le corps de la
 requête n'a pas de type de retour déclaré, si bien que TypeScript n'en contrôle pas les
 propriétés en trop, et le serveur jette sans un mot un champ qu'il ne connaît pas. L'écran
@@ -210,8 +216,8 @@ continuerait d'afficher un champ « Auteur id » que personne ne lit.
 Retouchez-le donc à la main. Dans `frontend/src/admin/vues/Tickets.vue`, retirez
 `auteur_id` de l'interface `Formulaire`, du formulaire vierge `VIERGE`, de `corps()` et de
 `saisie()`, et supprimez le bloc `champ-auteur_id` du formulaire. Laissez-le dans `Ligne`,
-dans `depuis()` et dans la liste des colonnes — la table montre toujours qui a ouvert
-chaque ticket.
+dans `depuis()`, dans la liste des colonnes et dans `PROPRIETES`, le panneau de détail —
+l'écran montre toujours qui a ouvert chaque ticket.
 
 ```ts file=examples/help-desk/frontend/src/admin/vues/Tickets.vue region=corps
 ```
@@ -226,8 +232,9 @@ qui attend un UUID. Le remplacer par une liste de tickets est un travail Vue ord
 
 ## 6. Le lancer
 
-Démarrez PostgreSQL et Mailpit, appliquez les deux migrations, et créez le compte
-d'administration que décrivait `add frontend-admin` :
+Démarrez PostgreSQL et Mailpit, appliquez les trois migrations — les comptes qu'a créés
+`auth`, puis `tickets` et `commentaires` —, et créez le compte d'administration que
+décrivait `add frontend-admin` :
 
 ```bash
 docker compose up -d
@@ -277,7 +284,7 @@ la main, en deux endroits. Dans
 - `src/tickets/tests/auteur.rs` — les deux tests écrits à la main.
 - `frontend/src/admin/vues/Tickets.vue` et `Commentaires.vue` — les écrans, sans champ
   d'auteur.
-- `frontend/src/api/client.ts` — le client typé, régénéré après la retouche.
+- `frontend/src/api/client.ts` — le client typé, engendré après la retouche.
 
 ## Pour aller plus loin
 
@@ -288,4 +295,4 @@ la main, en deux endroits. Dans
 - [Authentification](../guides/auth.md) couvre `Identity`, les rôles, et les routes qui
   gèrent les comptes.
 - [Appeler l'API en TypeScript](./typescript-client.md) explique le client que cette page a
-  régénéré.
+  engendré.

@@ -118,4 +118,4 @@ puisqu'aucune des deux routes de santé ne déclare de corps à analyser.
   une ressource plus riche que celle que cette série a bâtie une commande à la fois.
 - [Construire un gestionnaire de tickets](./help-desk.md) est le tutoriel suivant : un
   projet neuf qui assemble `auth`, les relations et le frontend d'administration, et
-  régénère ce client après avoir retouché le contrat à la main.
+  engendre ce client une fois le contrat retouché à la main.

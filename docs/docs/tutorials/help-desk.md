@@ -31,8 +31,10 @@ git add -A && git commit -q -m "projet neuf"
 rbs add frontend-admin
 ```
 
-`add` refuses to write into a dirty working tree, and `rbs new` initialises the repository
-without committing — hence the commit before it. The plan is long; its file lines are cut
+`rbs new` initialises the repository without committing. The commit is not required
+here — `add` only refuses uncommitted changes to files Git already tracks, and nothing is
+tracked yet — but it gives every step that follows a clean base, so that `git diff` shows
+exactly what each command wrote. The plan is long; its file lines are cut
 below, and what stays is the head and the tail.
 
 {/* rbs:transcript cmd="rbs add frontend-admin" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
@@ -64,7 +66,8 @@ rbs generate crud tickets \
   --fields "sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users"
 ```
 
-`generate` refuses a dirty tree as well, so every step on this page starts with a commit.
+From here on the commits are required: `generate` refuses to write while tracked files
+carry uncommitted changes, so every step on this page starts with one.
 
 {/* rbs:transcript cmd="rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
 ```text
@@ -103,8 +106,8 @@ generated test can fill in — it cannot know which account to point at — so t
 ## 3. Hang comments on them
 
 A comment belongs to a ticket, so `commentaires` references `tickets`. The order of the
-two commands is the order of the foreign key, and the CLI enforces it. Run the second one
-first and nothing is written:
+two commands is the order of the foreign key, and the CLI enforces it. Had you run the
+second one before `tickets` existed, nothing would have been written:
 
 {/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade,auteur:references:users --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
 ```text
@@ -180,8 +183,10 @@ git add -A && git commit -q -m "l'auteur est lu dans le jeton"
 
 ## 5. Carry the change to the screen
 
-The screens call the API through a typed client generated from the server's OpenAPI
-document. The contract has just changed, so regenerate it:
+The screens call the API through a typed client, and `frontend-admin` does not ship it:
+it is generated from *your* project's OpenAPI document, and the screens — `Tickets.vue`
+included — import it, so the frontend does not build until it exists. Generate it now that
+the contract is settled:
 
 ```bash
 rbs generate client --lang ts --out frontend/src/api
@@ -197,16 +202,16 @@ plan pour …/help-desk
 ✓ client engendré — frontend/src/api/client.ts porte 29 opérations
 ```
 
-`CreateTicket` in `client.ts` no longer has `auteur_id`. You might expect the screen to
-stop type-checking now, since it still sends that field. It does not: `npm run typecheck`
+`CreateTicket` in `client.ts` has no `auteur_id`: the client was read from the contract
+as section 4 left it. You might expect the screen to fail type-checking, since it still sends that field. It does not: `npm run typecheck`
 passes. The function that builds the request body has no declared return type, so
 TypeScript does not check it for extra properties, and the server silently drops a field
 it does not know. The screen would keep showing an "Auteur id" input that nobody reads.
 
 So edit it by hand. In `frontend/src/admin/vues/Tickets.vue`, remove `auteur_id` from the
 `Formulaire` interface, from the blank form `VIERGE`, from `corps()` and `saisie()`, and
-delete the form's `champ-auteur_id` block. Leave it in `Ligne`, `depuis()` and the column
-list — the table still shows who opened each ticket.
+delete the form's `champ-auteur_id` block. Leave it in `Ligne`, `depuis()`, the column list
+and the detail panel's `PROPRIETES` — the screen still shows who opened each ticket.
 
 ```ts file=examples/help-desk/frontend/src/admin/vues/Tickets.vue region=corps
 ```
@@ -221,8 +226,9 @@ that expects a UUID. Replacing it with a list of tickets is ordinary Vue work, a
 
 ## 6. Run it
 
-Start PostgreSQL and Mailpit, apply the two migrations, and create the administrator
-account that `add frontend-admin` described:
+Start PostgreSQL and Mailpit, apply the three migrations — the accounts `auth` created,
+then `tickets` and `commentaires` — and create the administrator account that
+`add frontend-admin` described:
 
 ```bash
 docker compose up -d
@@ -272,7 +278,7 @@ hand, in two places. In
 - `src/tickets/tests/auteur.rs` — the two tests written by hand.
 - `frontend/src/admin/vues/Tickets.vue` and `Commentaires.vue` — the screens, without an
   author input.
-- `frontend/src/api/client.ts` — the typed client, regenerated after the edit.
+- `frontend/src/api/client.ts` — the typed client, generated after the edit.
 
 ## Going further
 
@@ -283,4 +289,4 @@ hand, in two places. In
 - [Authentication](../guides/auth.md) covers `Identity`, roles, and the routes that
   handle accounts.
 - [Calling the API from TypeScript](./typescript-client.md) explains the client this page
-  regenerated.
+  generated.

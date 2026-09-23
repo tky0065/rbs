@@ -111,5 +111,5 @@ parse.
 - [`rbs generate`](../cli/generate.md) covers the full grammar of `--fields`, for a
   resource richer than the one this series built one command at a time.
 - [Building a help desk](./help-desk.md) is the next tutorial: a new project that
-  assembles `auth`, relations and the admin frontend, and regenerates this client after
-  editing the contract by hand.
+  assembles `auth`, relations and the admin frontend, and generates this client once
+  the contract is edited by hand.
