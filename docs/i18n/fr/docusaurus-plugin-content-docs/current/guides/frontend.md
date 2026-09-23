@@ -174,7 +174,7 @@ shell d'administration n'ajoute que l'interrupteur qui la bascule.
 
 ## Ce que le shell d'administration ajoute
 
-Dix-neuf fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
+Vingt et un fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
 Le shell exige [`auth`](./auth.md), qui tire à son tour `mail` et `rate-limit` : tous
 descendent d'un seul plan, nommés avant que rien ne soit écrit.
 
@@ -196,6 +196,8 @@ plan pour …/demo
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
   + frontend/src/admin/lien.ts                                              créé
+  + frontend/src/admin/references/ChoixReference.vue                        créé
+  + frontend/src/admin/references/libelles.ts                               créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
   + frontend/src/admin/vues/Inscription.vue                                 créé
@@ -206,8 +208,8 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  175 à créer, 15 à modifier
-✓ frontend-admin installée — 175 créés, 15 modifiés
+  178 à créer, 15 à modifier
+✓ frontend-admin installée — 178 créés, 15 modifiés
 
   cd frontend && npm install
 
@@ -341,8 +343,8 @@ Tout ce qui suit — filtre, tri, pagination, formulaire, détail, rendu — ne 
 
 ### Ce que porte le formulaire
 
-Un contrôle par colonne déclarée : un champ texte pour une chaîne, un texte long, un UUID ou
-une référence ; le champ numérique du navigateur pour un entier ou un flottant ; un champ
+Un contrôle par colonne déclarée : un champ texte pour une chaîne, un texte long ou un
+UUID ; un sélecteur pour une référence, décrit plus bas ; le champ numérique du navigateur pour un entier ou un flottant ; un champ
 texte pour un décimal, que le contrat porte en chaîne afin qu'un nombre JavaScript n'en perde
 pas les centimes ; une case à cocher pour un booléen ; les contrôles natifs de date et
 d'instant, dont la sortie est exactement le format que le contrat attend — le fuseau de
@@ -356,6 +358,42 @@ Le filtre porte sur la **première colonne textuelle** de la table, et une table
 aucune n'affiche pas de champ de filtre plutôt qu'un champ qui ne filtre rien : le filtre du
 projet conjugue ses conditions par ET, et chercher un motif dans plusieurs colonnes
 demanderait un OU que le contrat n'expose pas.
+
+### Les références
+
+Une colonne référence porte un UUID, et l'écran n'en fait ni saisir ni lire aucun. Le
+formulaire choisit la ligne par `ChoixReference`, un champ de recherche qui ouvre une liste
+de résultats : il attend 250 ms après la dernière touche, demande à la route de filtre de la
+cible 20 lignes dont la colonne libellé contient ce qui a été tapé, et se mène aux flèches, à
+Entrée et à Échap ; une référence facultative y ajoute une entrée « Aucun » qui la vide. La
+liste et le panneau de détail montrent le libellé à la place de l'UUID, qui reste dans le
+`title` de la cellule. Quelle colonne sert de libellé, et comment `label=` en nomme une
+autre, se lit dans [Relations](./relations.md#sur-lécran-dadministration).
+
+Le libellé se résout dans l'écran, pas sur le serveur : l'API engendrée garde son contrat.
+Après chaque page chargée, l'écran demande une fois à chaque cible les libellés des
+identifiants qu'il montre, par `{ "id": { "in": [...] } }` — l'opérateur que décrit
+[Filtrage](./filtering.md) —, et les fusionne avec ceux qu'il connaît déjà, si bien
+qu'ouvrir un détail ne fait pas oublier au reste de la page ses libellés. Tant qu'un libellé
+n'est pas arrivé, ou s'il ne peut pas se lire, la cellule montre l'identifiant raccourci,
+`01a0ce7c…` : une panne n'arrête jamais la table et ne lève aucune notification. Une colonne
+référence ne se trie pas — trier des UUID ne veut rien dire, et trier par libellé
+demanderait une jointure que le serveur ne fait pas.
+
+Les deux pièces sont génériques, une par projet, sous `frontend/src/admin/references/` :
+`ChoixReference.vue` et `libelles.ts`. `frontend-admin` les pose, et `generate crud` les
+écrit sur un projet installé avant qu'elles n'existent, jamais par-dessus. Chaque écran ne
+porte que les deux fonctions qui les lient à ses cibles :
+
+```ts file=examples/help-desk/frontend/src/admin/vues/Commentaires.vue region=references
+```
+
+Une référence à `users` passe par `POST /users/filter`, que seul un administrateur peut
+appeler — les adresses de tous les comptes sont une donnée personnelle, et l'espace
+d'administration lui-même est ouvert à toute session. Un compte de rôle `user` voit donc des
+identifiants raccourcis dans la colonne de l'auteur, et le sélecteur affiche « Réservé aux
+administrateurs » à la place des résultats. La route et ses droits sont dans
+[Authentification](./auth.md#lister-les-comptes).
 
 ### Régénérer
 

@@ -382,6 +382,8 @@ says where it goes. A code shared by several commands means the same thing in al
 | `decimal_sous_sqlite` | `generate`, `generate migration` | A `decimal` field on a SQLite project: the driver binds no exact decimal. |
 | `enfant_sans_cle` | `generate` | The child named by `--has-many` has no column referencing this table. |
 | `ecran_occupe` | `generate` | The table's admin screen would take the demonstration screen's own file and route: rename the table, or pass `--no-admin`. |
+| `label_inconnu` | `generate` | `label=<colonne>` names a column the target does not declare as text; the message lists the ones it does. |
+| `noyau_anterieur` | `generate` | The project's `rbs-core` predates 1.10.0, which the generated filter's `in` requires: `rbs upgrade` raises it. |
 | `champs_vides` | `generate migration` | `--fields` declares no column: the rendered migration would alter nothing. |
 | `table_sans_module` | `generate migration` | No entity of the project declares that table; the message lists the ones it knows. |
 | `colonne_deja_declaree` | `generate migration` | The table already carries a column of that name; the message names the file that attests it. |

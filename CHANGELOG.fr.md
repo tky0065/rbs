@@ -13,6 +13,38 @@ dépréciation.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Une référence se choisit et se lit par un libellé dans les écrans d'administration.**
+  Sur un projet portant `frontend-admin`, l'écran qu'écrit `generate crud` ne demande plus
+  d'UUID là où la table porte une référence, et n'en affiche plus : le formulaire choisit la
+  ligne dans un champ de recherche, et la liste comme le détail montrent une colonne de la
+  cible — sa première colonne textuelle, `email` pour `users`. Deux fichiers génériques,
+  `frontend/src/admin/references/ChoixReference.vue` et `libelles.ts`, portent le sélecteur
+  et la résolution ; `generate crud` les écrit sur un projet installé avant eux. Une colonne
+  référence ne se trie plus. Une cible sans route de filtre garde la saisie d'identifiant,
+  et une cible sans colonne textuelle montre l'identifiant raccourci ; le plan annonce l'un
+  et l'autre.
+- **`label=<colonne>` sur une référence** nomme la colonne de la cible qui tient lieu de
+  ligne sur l'écran d'administration, quand la première colonne textuelle n'est pas la
+  bonne. Il est refusé sur un champ qui n'est pas une référence, vide, répété, ou nommant une
+  colonne que la cible ne déclare pas en texte — le refus liste celles qu'elle déclare.
+- **`POST /users/filter` dans `auth`**, réservée aux administrateurs : une page de comptes
+  réduits à `id` et `email`, filtrée par `id` et `email`. C'est elle qui laisse un écran
+  montrer un auteur par son email. Un projet dont l'`auth` la précède l'ajoute à la main : le
+  guide `auth` dit quelles six pièces reprendre.
+- **`in` sur toute colonne comparable.** `rbs_core::Comparison` gagne `in`, que seules les
+  énumérations avaient, et le `filter.rs` engendré l'applique : `{ "id": { "in": [...] } }`
+  relit une page de lignes en une seule requête. Ajouter un champ public à `Comparison` rompt
+  un littéral de structure écrit sans `..Default::default()`.
+
+### Modifié
+
+- **`generate crud` refuse un projet dont le `rbs-core` précède 1.10.0.** Le `filter.rs`
+  qu'il écrit applique `in`, qu'un noyau antérieur n'a pas : le projet ne compilerait plus.
+  Le refus nomme `rbs upgrade`, qui relève cette ligne. Une dépendance par chemin, sans
+  version, n'est pas bornée.
+
 ## [1.9.0] — 2026-09-23
 
 ### Ajouté

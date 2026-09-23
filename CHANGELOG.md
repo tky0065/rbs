@@ -12,6 +12,37 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Added
+
+- **A reference is chosen and read by a label on the admin screens.** On a project carrying
+  `frontend-admin`, the screen `generate crud` writes no longer asks for a UUID where the
+  table holds a reference, nor shows one: the form picks the row in a search field, and the
+  list and the detail panel show a column of the target — its first textual one, `email`
+  for `users`. Two generic files, `frontend/src/admin/references/ChoixReference.vue` and
+  `libelles.ts`, carry the picker and the resolution; `generate crud` writes them on a
+  project installed before them. A reference column is no longer sortable. A target without
+  a filter route keeps the identifier input, and one without a textual column shows the
+  shortened identifier; the plan announces both.
+- **`label=<colonne>` on a reference** names the target column that stands for a row on the
+  admin screen, when the first textual one is not it. It is refused on a field that is not
+  a reference, empty, repeated, or naming a column the target does not declare as text —
+  the refusal lists the ones it does.
+- **`POST /users/filter` in `auth`**, for administrators only: a page of accounts reduced to
+  `id` and `email`, filtered by `id` and `email`. It is what lets a screen show an author by
+  their email. A project whose `auth` predates it gets it by hand: the `auth` guide says
+  which six pieces to take.
+- **`in` on every comparable column.** `rbs_core::Comparison` gains `in`, which only
+  enumerations had, and the generated `filter.rs` applies it: `{ "id": { "in": [...] } }`
+  reads a page of rows back in one request. Adding a public field to `Comparison` breaks a
+  struct literal written without `..Default::default()`.
+
+### Changed
+
+- **`generate crud` refuses a project whose `rbs-core` predates 1.10.0.** The `filter.rs` it
+  writes applies `in`, which an earlier core does not have: the project would no longer
+  compile. The refusal names `rbs upgrade`, which raises that line. A path dependency, with
+  no version, is not bounded.
+
 ## [1.9.0] — 2026-09-23
 
 ### Added

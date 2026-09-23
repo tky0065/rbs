@@ -88,6 +88,7 @@ plan pour …/demo
   + src/auth/tests/roles.rs                                créé
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
+  + src/auth/tests/users.rs                                créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260920_112413_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -97,8 +98,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  51 à créer, 13 à modifier
-✓ auth installée — 51 créés, 13 modifiés
+  52 à créer, 13 à modifier
+✓ auth installée — 52 créés, 13 modifiés
 
   rbs migrate up
 

@@ -84,6 +84,7 @@ plan pour …/blog
   + src/auth/tests/roles.rs                                créé
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
+  + src/auth/tests/users.rs                                créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260922_082422_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -93,15 +94,15 @@ plan pour …/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  51 à créer, 13 à modifier
-✓ auth installée — 51 créés, 13 modifiés
+  52 à créer, 13 à modifier
+✓ auth installée — 52 créés, 13 modifiés
 
   rbs migrate up
 
   rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@blog.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 ```
 
-Quinze routes viennent avec, sur treize chemins — `/auth/sessions` porte à la fois la liste
+Seize routes viennent avec, sur quatorze chemins — `/auth/sessions` porte à la fois la liste
 et la révocation globale, `/auth/me` à la fois le profil et la seule écriture qu'il accepte.
 Six ouvrent le cycle central :
 
@@ -135,9 +136,11 @@ routes qui ne doivent pas servir une adresse non prouvée.
 Une septième, `GET /auth/registration`, dit si `POST /auth/register` est ouverte — la
 section ci-dessous explique pourquoi un écran doit le demander. Une huitième,
 `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton changer son mot de
-passe sans lien courriel — couverte juste en dessous. Les sept autres portent sur un mot de
+passe sans lien courriel — couverte juste en dessous. Sept autres portent sur un mot de
 passe oublié, une adresse non confirmée, ou les sessions de l'appelant, chacune dans sa
-propre section plus bas sur cette page.
+propre section plus bas sur cette page. La dernière, `POST /users/filter`, liste les comptes
+à un administrateur : c'est elle qui laisse un écran d'administration montrer un auteur par
+son email, et [Lister les comptes](#lister-les-comptes) la couvre.
 
 `PATCH /auth/me` prend une adresse et rien d'autre : le corps est l'`EmailRequest` que
 lisent déjà `forgot-password` et `resend-verification`, si bien qu'un champ ajouté là
@@ -562,6 +565,44 @@ rien si l'une des deux variables manque ou est vide, et rien du tout sous
 `cargo run --bin seed` ne passe jamais par la garde que porte
 [`rbs seed`](../cli/seed.md).
 
+## Lister les comptes
+
+`POST /users/filter` est la seule route de la feature qui ne vit pas sous `/auth` : elle
+liste les comptes, et seulement à un administrateur. Elle existe pour les écrans
+d'administration — une référence à `users` se choisit dans un sélecteur et se montre par son
+email, et le sélecteur a besoin de quoi chercher —, si bien qu'elle lit le même corps que la
+route de filtre qu'écrit `generate crud` pour une table, sur deux colonnes : `id`, qui prend
+`in`, et `email`, qui prend `contains`, avec `sort` sur `id`, `email` ou `created_at`.
+`page` et `per_page` restent dans la chaîne de requête, et `per_page` est plafonné à 100
+comme partout. `contains` cherche dans l'adresse telle qu'elle a été enregistrée, sans
+blancs autour et en minuscules.
+
+La réponse est une page de `UserSummary`, qui porte `id` et `email` et rien d'autre — et non
+le `UserResponse` de `/auth/me` : une liste faite pour choisir un compte n'a que faire d'un
+rôle ou d'une date. Le seuil est `Role::Admin`, parce que toutes les adresses que le service
+connaît sont une donnée personnelle, et que l'espace d'administration lui-même est ouvert à
+toute session : un seuil plus bas livrerait la liste entière à quiconque s'est inscrit. Sans
+jeton, la route répond 401, en deçà d'`admin` 403, et 400 à un filtre qu'elle ne sait pas
+lire.
+
+```rust file=examples/blog-auth/src/auth/controller/account.rs region=comptes
+```
+
+Un projet dont l'`auth` a été installée avant 1.10.0 n'a pas cette route, et `rbs upgrade`
+ne peut pas la poser — il ne réécrit jamais un contrôleur. `generate crud` garde alors une
+référence à `users` en saisie d'identifiant, et son plan renvoie à cette section. Ajouter la
+route à la main, c'est reprendre, d'un projet engendré par 1.10.0 ou de
+[`examples/blog-auth`](https://github.com/tky0065/rbs/tree/main/examples/blog-auth), une
+pièce par couche : `UserSummary` et `UserFilter` dans `src/auth/dto.rs` ; `filter` et les
+aides qu'il appelle dans `src/auth/repository/user.rs`, réexporté par `repository/mod.rs` ;
+`filter_users` dans `src/auth/service/account.rs`, réexporté par `service/mod.rs` ; le
+handler ci-dessus dans `src/auth/controller/account.rs` ; la ligne
+`.route("/users/filter", post(controller::account::filter_users))` dans `src/auth/mod.rs` ;
+et `crate::auth::controller::account::filter_users` parmi les chemins de `src/openapi.rs`.
+L'écran résout les libellés par `in` : le `rbs-core` du projet doit donc être en 1.10.0 au
+moins, ce dont `rbs upgrade` se charge. Régénérez ensuite le client typé, et les écrans dont
+la référence s'est repliée, avec `--force`.
+
 ## Tester une route protégée
 
 Les tests d'une feature créent un compte. `Identity` vérifie la signature, puis relit la
@@ -583,10 +624,10 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
 sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`,
 `logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `account.rs`, `reset.rs`,
-`verification.rs`, `guard.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
+`verification.rs`, `guard.rs`, `users.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
 aides de requête de `http.rs` — l'inscription et son interrupteur, les 401 identiques, la
 rotation, le rejeu, la révocation, le changement d'adresse, les parcours de mot de passe et
-de vérification ci-dessus, la garde d'adresse vérifiée et le document OpenAPI. Tous passent par HTTP contre une vraie base, et tous
+de vérification ci-dessus, la garde d'adresse vérifiée, la liste des comptes et le document OpenAPI. Tous passent par HTTP contre une vraie base, et tous
 portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans serveur démarré,
 et `cargo test -- --ignored` les lance contre la base que nomme votre `.env`, migrations
 appliquées. Un test échappe à la règle et reste un `#[test]` ordinaire, dans `mod.rs` : il

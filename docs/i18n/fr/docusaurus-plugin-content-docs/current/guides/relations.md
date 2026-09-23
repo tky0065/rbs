@@ -237,3 +237,60 @@ Rendre la référence `optional` contourne le problème directement — un `post
 proprement, `author_id` absent — et reste le seul remède disponible depuis `--fields` seul :
 tout le reste de cette page s'applique à une référence optionnelle exactement comme à une
 référence requise.
+
+## Sur l'écran d'administration
+
+Sur un projet portant `frontend-admin`, l'écran qu'écrit `generate crud` ne demande pas
+d'UUID là où la table porte une référence, et n'en affiche pas non plus. Le formulaire
+choisit la ligne par un sélecteur qui cherche à mesure que l'on tape, et la liste comme le
+panneau de détail montrent un libellé là où le contrat rend un identifiant. Ce libellé est
+une colonne de la cible, choisie pendant le calcul du plan : la première colonne textuelle
+— `string` ou `text`, ni énumération ni référence — que déclare le modèle de la cible :
+`sujet` pour une table `tickets` qui la déclare en premier, `email` pour `users`. Quand la première colonne
+textuelle n'est pas celle à laquelle on reconnaît une ligne — un `code` déclaré avant un
+`nom` —, `label=<colonne>` en nomme une autre :
+
+{/* rbs:libre raison="fragment de la grammaire de --fields, non une sortie" */}
+```text
+ticket:references:tickets:label=sujet
+```
+
+La colonne doit exister sur la cible et être textuelle. Tout le reste est refusé avant
+qu'aucun fichier ne soit écrit, avec les colonnes qui conviendraient — ici une énumération,
+qu'un sélecteur ne saurait chercher par sous-chaîne :
+
+{/* rbs:transcript cmd="rbs g crud commentaires --fields corps:text,ticket:references:tickets:label=statut --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs g crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,ferme) && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
+```text
+$ rbs g crud commentaires --fields corps:text,ticket:references:tickets:label=statut --dry-run
+erreur : relation « ticket » — « statut » n'est pas une colonne textuelle de « tickets »
+        → colonnes textuelles : sujet, detail
+```
+
+`label=` sur un champ qui n'est pas une référence est un modificateur inconnu, comme
+`cascade` le serait ; vide ou répété, il est refusé aussi. Il est vérifié même sur un projet
+sans `frontend-admin`, où il n'a encore rien à changer : une colonne mal orthographiée ne
+doit pas attendre en silence le jour où l'écran existera. Quoi qu'il nomme, l'entité, les
+DTO, la migration et le contrat OpenAPI restent les mêmes.
+
+Le libellé se lit dans l'écran plutôt que de se joindre sur le serveur, si bien que l'API
+engendrée ne change pas de forme : après chaque page, l'écran demande à la route de filtre
+de la cible les libellés des identifiants qu'il montre, en une seule requête —
+`{ "id": { "in": [...] } }`, l'opérateur que décrit [Filtrage](./filtering.md). C'est
+aussi pourquoi une colonne référence ne se trie pas : trier des UUID ne veut rien dire, et
+trier par libellé demanderait la jointure que cette approche écarte.
+
+Deux cas se replient au lieu de refuser, et le plan annonce chacun d'une ligne. Une cible
+sans route de filtre — une table interne d'`auth` comme `refresh_tokens`, ou une feature que
+`generate feature` a laissée vide — garde la saisie d'identifiant d'avant : il n'y a rien à
+chercher. `users`, sur un projet dont l'`auth` précède `POST /users/filter`, est le même cas,
+et sa ligne renvoie à [Lister les comptes](./auth.md#lister-les-comptes), `rbs upgrade` ne
+touchant jamais à un contrôleur. Une cible sans colonne textuelle, et sans `label=`, reçoit
+son sélecteur, mais le sélecteur et les cellules montrent l'identifiant raccourci :
+
+{/* rbs:transcript cmd="rbs g crud releves --fields note:text,compteur:references:compteurs --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs g crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,ferme) && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs g crud compteurs --fields valeur:int && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
+```text
+  la référence « compteur » s'affichera par son identifiant raccourci : « compteurs » n'a pas de colonne textuelle — label=<colonne> en choisit une
+```
+
+Ce que l'écran montre tant qu'un libellé se charge, quand il ne peut pas se lire, ou à un
+compte qui n'est pas administrateur est décrit dans [Frontend](./frontend.md#les-références).

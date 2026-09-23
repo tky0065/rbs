@@ -412,11 +412,11 @@ Le nom déclaré est celui de la *relation*, `author` ; la colonne s'en dérive,
 ce qui permet à la variante SeaORM, à la clé étrangère et au champ du DTO de s'accorder sur
 un nom sans que personne ne le répète. Le troisième segment est la table cible, telle qu'elle
 existe dans le projet ; une table que le CLI ne trouve pas est refusée, nommément, aux côtés
-de celles qu'il connaît. Ce qu'une référence écrit des deux côtés de la relation, ses deux
+de celles qu'il connaît. Ce qu'une référence écrit des deux côtés de la relation, ses trois
 modificateurs propres et la forme de ses refus relèvent de
 [Relations](../guides/relations.md), pas de cette page.
 
-### Les six modificateurs
+### Les sept modificateurs
 
 | Modificateur | Effet |
 |---|---|
@@ -426,6 +426,7 @@ modificateurs propres et la forme de ses refus relèvent de
 | `max=<n>` | Réservé aux champs textuels. Borne de longueur dans les DTO générés, en surcharge du défaut. |
 | `cascade` | Réservé aux références. `ON DELETE CASCADE`. |
 | `nullify` | Réservé aux références. `ON DELETE SET NULL` — exige `optional`. |
+| `label=<colonne>` | Réservé aux références. La colonne de la cible qui nomme une ligne sur l'écran d'administration ; par défaut, la première colonne textuelle. |
 
 Leur ordre est libre et chacun ne peut apparaître qu'une fois. `unique` et `index` ensemble
 sont refusés comme redondants : une contrainte d'unicité pose déjà un index — et `index` seul
@@ -433,6 +434,15 @@ sur une référence l'est tout autant, sa clé étrangère étant indexée sans 
 `cascade` et `nullify` se contredisent et sont refusés ensemble ; le reste de la grammaire
 d'une référence, et pourquoi son index n'est jamais optionnel, vit dans
 [Relations](../guides/relations.md).
+
+`label=` et `max=` sont les deux modificateurs qui portent une valeur. `label=` nomme une
+colonne `string` ou `text` de la cible, et il est refusé vide, répété, posé sur un champ qui
+n'est pas une référence, ou nommant une colonne que la cible ne déclare pas en texte — le
+refus liste celles qu'elle déclare. Il ne change que l'écran d'administration : l'entité,
+les DTO, la migration et le contrat OpenAPI sont les mêmes avec ou sans lui. Sur un projet
+sans `frontend-admin`, il n'a encore rien à changer, et il est vérifié quand même, pour
+qu'une colonne mal orthographiée n'attende pas en silence le jour où l'écran existera.
+[Relations](../guides/relations.md#sur-lécran-dadministration) montre ce qu'il nomme.
 
 Ni `unique` ni `index` ne s'applique à un champ `text` : MySQL refuse un index sur une
 colonne `TEXT` sans longueur de préfixe (erreur 1170). Le refus vaut pour tous les moteurs,

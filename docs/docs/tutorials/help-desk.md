@@ -48,8 +48,8 @@ plan pour …/help-desk
   + frontend/src/admin/vues/Demonstration.vue                               créé
   ~ AGENTS.md                                                               modifié
 
-  175 à créer, 15 à modifier
-✓ frontend-admin installée — 175 créés, 15 modifiés
+  178 à créer, 15 à modifier
+✓ frontend-admin installée — 178 créés, 15 modifiés
 ```
 
 One fragment asked for, five installed. The admin shell needs someone to be signed in, so
@@ -109,7 +109,7 @@ A comment belongs to a ticket, so `commentaires` references `tickets`. The order
 two commands is the order of the foreign key, and the CLI enforces it. Had you run the
 second one before `tickets` existed, nothing would have been written:
 
-{/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade,auteur:references:users --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
+{/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users --dry-run" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
 ```text
 erreur : relation « ticket » — « tickets » est introuvable dans ce projet
         → entités connues : commentaires, one_time_tokens, refresh_tokens, users
@@ -120,11 +120,11 @@ In the right order:
 ```bash
 git add -A && git commit -q -m "tickets"
 rbs generate crud commentaires \
-  --fields "corps:text,ticket:references:tickets:cascade,auteur:references:users"
+  --fields "corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users"
 git add -A && git commit -q -m "commentaires"
 ```
 
-{/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade,auteur:references:users" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
+{/* rbs:transcript cmd="rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" extrait="oui" */}
 ```text
   + migration/src/m20260923_134226_create_commentaires.rs   créé
   + frontend/src/admin/vues/Commentaires.vue                créé
@@ -141,12 +141,20 @@ from under its writing. `src/tickets/model.rs` shows up as modified because a ti
 born one second apart, which is what guarantees `tickets` is created before the table
 that points at it.
 
+`label=sujet` says which column of `tickets` stands for a ticket on the comments screen —
+in the picker that chooses one, and in the list that shows which ticket a comment belongs
+to. Here it changes nothing: left out, the CLI takes the first textual column of the
+target, and `sujet` is that column. It is written so that you see the syntax once, on a
+case where you can check what it does; on a table whose first textual column is not the
+one a person would recognise a row by — a `code` before a `nom` — it is the only way to
+say so. `auteur` carries none, and gets `email`, the first textual column of `users`.
+
 ## 4. Take the author from the token
 
 Everything so far was generated, and it has a hole. As generated, creating a ticket reads
 `auteur_id` from the request body. Any signed-in account can therefore open a ticket in
-someone else's name, and the screen asks whoever fills in the form to paste an account's
-UUID. The author is not something the caller should choose: it is the caller.
+someone else's name, and the screen offers whoever fills in the form a picker of every
+account. The author is not something the caller should choose: it is the caller.
 
 Three files change, one per layer, in the order a request crosses them. First, the input
 types stop accepting the field, at creation and at update — an author is not rewritten
@@ -192,26 +200,28 @@ the contract is settled:
 rbs generate client --lang ts --out frontend/src/api
 ```
 
-{/* rbs:transcript cmd="rbs generate client --lang ts --out frontend/src/api" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade,auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
+{/* rbs:transcript cmd="rbs generate client --lang ts --out frontend/src/api" setup="rbs new help-desk --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/help_desk && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add frontend-admin && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud tickets --fields sujet:string,detail:text,statut:enum(ouvert,en_cours,resolu,ferme),priorite:enum(basse,normale,haute),auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud commentaires --fields corps:text,ticket:references:tickets:cascade:label=sujet,auteur:references:users && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="help-desk" */}
 ```text
 plan pour …/help-desk
 
   + frontend/src/api/client.ts   créé
 
   1 à créer
-✓ client engendré — frontend/src/api/client.ts porte 29 opérations
+✓ client engendré — frontend/src/api/client.ts porte 30 opérations
 ```
 
 `CreateTicket` in `client.ts` has no `auteur_id`: the client was read from the contract
 as section 4 left it. You might expect the screen to fail type-checking, since it still sends that field. It does not: `npm run typecheck`
 passes. The function that builds the request body has no declared return type, so
 TypeScript does not check it for extra properties, and the server silently drops a field
-it does not know. The screen would keep showing an "Auteur id" input that nobody reads.
+it does not know. The form would keep offering an "Auteur" picker whose choice nobody reads.
 
-So edit it by hand. In `frontend/src/admin/vues/Tickets.vue`, remove `auteur_id` from the
-`Formulaire` interface, from the blank form `VIERGE`, from `corps()` and `saisie()`, and
-delete the form's `champ-auteur_id` block. Leave it in `Ligne`, `depuis()`, the column list
-and the detail panel's `PROPRIETES` — the screen still shows who opened each ticket.
+So edit it by hand. In `frontend/src/admin/vues/Tickets.vue`, delete the form's
+`champ-auteur_id` block — the `ChoixReference` bound to `valeurs.auteur_id` — and remove
+`auteur_id` from the `Formulaire` interface, from the blank form `VIERGE`, from `corps()`
+and from `saisie()`. Leave it in `Ligne`, `depuis()`, `REFERENCES`, the column list and
+the detail panel's `PROPRIETES`: the screen still shows who opened each ticket, by their
+email.
 
 ```ts file=examples/help-desk/frontend/src/admin/vues/Tickets.vue region=corps
 ```
@@ -220,9 +230,18 @@ and the detail panel's `PROPRIETES` — the screen still shows who opened each t
 the contract, but a screen only notices a field has disappeared where it types what it
 sends.
 
-One limit is left as it is. In `Commentaires.vue`, `ticket_id` is still a text input
-that expects a UUID. Replacing it with a list of tickets is ordinary Vue work, and
-[Frontend](../guides/frontend.md) describes the screen you would be editing.
+`ticket_id`, on the other hand, stays in the comments form, and needs no edit: the screen
+already chooses the ticket by its subject rather than asking for a UUID. Each reference the
+screen carries gets two functions, generated from the target's filter route — one searches
+rows by the label column as you type, the other reads back the labels of a whole page of
+identifiers in a single request, through the `in` operator:
+
+```ts file=examples/help-desk/frontend/src/admin/vues/Commentaires.vue region=references
+```
+
+The same second function is what the list and the detail panel use to show a subject and
+an email where the contract returns two UUIDs. [Frontend](../guides/frontend.md#references)
+describes the picker, and what the screen shows while a label is loading or cannot be read.
 
 ## 6. Run it
 
@@ -248,8 +267,9 @@ cargo run
 Open [`http://127.0.0.1:8080/admin`](http://127.0.0.1:8080/admin) and sign in with
 `ADMIN_EMAIL` and `ADMIN_PASSWORD` from your `.env`. The rail has two new entries,
 **Tickets** and **Commentaires**. Open a ticket: the form asks for a subject, a detail, a
-status and a priority, and no author. Once saved, the list shows your account's id in the
-author column.
+status and a priority, and no author. Once saved, the list shows your account's email in
+the author column. Then add a comment: the ticket field is a picker — type a few letters of
+the subject and choose it from the list — and the new row names the ticket by its subject.
 
 The same guarantee is pinned down by a test, which is the part that keeps holding after
 you stop looking. It posts a ticket whose body names *another real account* — a made-up
@@ -277,7 +297,7 @@ hand, in two places. In
   repository → model`, with the edit in `dto.rs`, `controller.rs` and `service.rs`.
 - `src/tickets/tests/auteur.rs` — the two tests written by hand.
 - `frontend/src/admin/vues/Tickets.vue` and `Commentaires.vue` — the screens, without an
-  author input.
+  author picker, and with the ticket picker the command generated.
 - `frontend/src/api/client.ts` — the typed client, generated after the edit.
 
 ## Going further
@@ -285,7 +305,7 @@ hand, in two places. In
 - [Relations](../guides/relations.md) covers the `references` grammar in full: the
   one-to-one form, `nullify`, and why every foreign key gets an index.
 - [Frontend](../guides/frontend.md) describes the two fragments and the screen
-  `generate crud` writes — the file to open for a ticket picker.
+  `generate crud` writes, reference picker included.
 - [Authentication](../guides/auth.md) covers `Identity`, roles, and the routes that
   handle accounts.
 - [Calling the API from TypeScript](./typescript-client.md) explains the client this page

@@ -41,7 +41,7 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 | `eq` | toute colonne | égalité stricte |
 | `gt`, `gte`, `lt`, `lte` | `int`, `float`, `decimal`, `datetime`, `date`, `uuid` | comparaison |
 | `contains` | `string`, `text` | sous-chaîne, `LIKE '%…%'` |
-| `in` | `enum(a,b,c)` | l'une des valeurs citées ; une liste vide n'en accepte aucune |
+| `in` | toute colonne sauf `string` et `text` | l'une des valeurs citées ; une liste vide n'en accepte aucune |
 | `is_null` | toute colonne | `true` exige une colonne nulle, `false` une colonne renseignée |
 
 `contains` cherche sa valeur à la lettre : `%` et `_`, les deux jokers de `LIKE`, sont
@@ -49,6 +49,20 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 collation du moteur : PostgreSQL distingue la casse, MySQL l'ignore avec sa collation par
 défaut. `ILIKE` trancherait, mais sea-orm ne l'expose que par `PgExpr`, et rbs engendre
 aussi pour MySQL et SQLite.
+
+`in` est ce qui relit un ensemble connu de lignes en une seule requête — les identifiants
+d'une page, par exemple, ce que fait précisément un écran d'administration engendré pour
+montrer un libellé là où une référence porte un UUID :
+
+```json
+{ "id": { "in": ["0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e", "0199e0b1-a1f0-7b2d-8e44-3c5d7f9a0b12"] } }
+```
+
+Il arrive avec rbs-core 1.10.0. Avant lui, `in` n'existait que sur les énumérations, et une
+colonne comparable l'ignorait comme tout opérateur qu'elle ne connaissait pas : ce corps
+aurait reçu la table entière plutôt que deux lignes. Un `filter.rs` engendré aujourd'hui
+applique `in`, et ne compile pas contre un noyau antérieur — c'est pourquoi
+`generate crud` refuse un projet dont le `rbs-core` précède 1.10.0, et nomme `rbs upgrade`.
 
 ## Swagger dit les deux formes
 
@@ -169,7 +183,7 @@ rbs g crud articles --fields "title:string:index, published:bool"
 
 ## Ce qu'il ne fait pas
 
-- ni `or`, ni groupes imbriqués, ni `in` ;
+- ni `or`, ni groupes imbriqués, ni `in` sur une colonne textuelle ;
 - aucune recherche plein texte — `contains` est un `LIKE`, et une vraie recherche demande un
   index que rbs ne crée pas ;
 - aucun filtre à travers une relation : `author_id` est filtrable, le nom de l'auteur ne

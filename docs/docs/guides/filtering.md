@@ -40,7 +40,7 @@ the same thing, and the short form is the one you write most often.
 | `eq` | every column | strict equality |
 | `gt`, `gte`, `lt`, `lte` | `int`, `float`, `decimal`, `datetime`, `date`, `uuid` | comparison |
 | `contains` | `string`, `text` | substring, `LIKE '%…%'` |
-| `in` | `enum(a,b,c)` | one of the listed values; an empty list accepts none |
+| `in` | every column but `string` and `text` | one of the listed values; an empty list accepts none |
 | `is_null` | every column | `true` requires null, `false` requires a value |
 
 `contains` searches its value literally: `%` and `_`, the two wildcards of `LIKE`, are
@@ -48,6 +48,20 @@ escaped, so `{ "contains": "50%" }` finds `50%` and not every row. It follows th
 collation: PostgreSQL distinguishes case, MySQL ignores it with its default collation.
 `ILIKE` would settle it, but sea-orm only exposes it through `PgExpr`, and rbs generates
 for MySQL and SQLite too.
+
+`in` is what reads a known set of rows back in one request — the identifiers of a page, for
+instance, which is exactly what a generated admin screen does to show a label where a
+reference holds a UUID:
+
+```json
+{ "id": { "in": ["0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e", "0199e0b1-a1f0-7b2d-8e44-3c5d7f9a0b12"] } }
+```
+
+It comes with rbs-core 1.10.0. Before it, `in` existed on enumerations only, and a
+comparable column ignored it like any operator it did not know: that body would have been
+answered with the whole table rather than two rows. A `filter.rs` generated today applies
+`in`, and does not compile against an earlier core — which is why `generate crud` refuses a
+project whose `rbs-core` predates 1.10.0, and names `rbs upgrade`.
 
 ## Swagger says both forms
 
@@ -165,7 +179,7 @@ rbs g crud articles --fields "title:string:index, published:bool"
 
 ## What it does not do
 
-- no `or`, no nested groups, no `in`;
+- no `or`, no nested groups, no `in` on a textual column;
 - no full-text search — `contains` is a `LIKE`, and a real search wants an index rbs does
   not create;
 - no filtering across a relation: `author_id` is filterable, the author's name is not.

@@ -191,6 +191,7 @@ function raison(cause: unknown, defaut: string): string {
   return phrase(cause, defaut)
 }
 
+// region: references
 /**
  * Les tables que cet écran référence : comment en chercher les lignes par leur libellé, et
  * comment en relire une page par identifiants.
@@ -223,6 +224,7 @@ const REFERENCES = {
       ).data.map((ligne) => ({ cle: ligne.id, libelle: ligne.email ?? courte(ligne.id) })),
   },
 } as const
+// endregion: references
 
 /** Les libellés résolus, par colonne puis par identifiant. */
 const libelles = ref<Record<string, Map<string, string>>>({})

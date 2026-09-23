@@ -169,7 +169,7 @@ adds the switch that flips it.
 
 ## What the admin shell adds
 
-Nineteen files, inside the tree the base laid down — one application, two route regimes. The
+Twenty-one files, inside the tree the base laid down — one application, two route regimes. The
 shell requires [`auth`](./auth.md), which in turn pulls `mail` and `rate-limit`: all of them
 come down from a single plan, named before anything is written.
 
@@ -191,6 +191,8 @@ plan pour …/demo
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
   + frontend/src/admin/lien.ts                                              créé
+  + frontend/src/admin/references/ChoixReference.vue                        créé
+  + frontend/src/admin/references/libelles.ts                               créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
   + frontend/src/admin/vues/Inscription.vue                                 créé
@@ -201,8 +203,8 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  175 à créer, 15 à modifier
-✓ frontend-admin installée — 175 créés, 15 modifiés
+  178 à créer, 15 à modifier
+✓ frontend-admin installée — 178 créés, 15 modifiés
 
   cd frontend && npm install
 
@@ -330,8 +332,8 @@ Everything after that — filter, sort, pagination, form, detail, rendering — 
 
 ### What the form holds
 
-One control per declared column: a text field for a string, a long text, a UUID or a
-reference; the browser's number field for an integer or a float; a text field for a decimal,
+One control per declared column: a text field for a string, a long text or a UUID; a
+picker for a reference, described below; the browser's number field for an integer or a float; a text field for a decimal,
 which the contract carries as a string so a JavaScript number cannot lose the cents; a
 checkbox for a boolean; the native date and datetime controls, whose output is exactly the
 format the contract wants — the instant's time zone is restored on submit; and a list for an
@@ -344,6 +346,41 @@ The filter searches the table's **first textual column**, and a table without on
 filter field at all rather than one that filters nothing: the project's filter conjoins its
 conditions with AND, and searching a pattern across several columns would want an OR the
 contract does not expose.
+
+### References
+
+A reference column holds a UUID, and the screen shows neither the form nor the list one to
+type or read. The form chooses the row through `ChoixReference`, a search field that opens a
+list of results: it waits 250 ms after the last key, asks the target's filter route for 20
+rows whose label column contains what was typed, and is driven by the arrows, Enter and
+Escape; an optional reference adds a "none" entry that clears it. The list and the detail
+panel show the label in place of the UUID, which stays in the cell's `title`. Which column
+serves as label, and how `label=` names another, is in
+[Relations](./relations.md#on-the-admin-screen).
+
+The label is resolved in the screen, not on the server: the generated API keeps its
+contract. After each page is loaded, the screen asks each target once for the labels of the
+identifiers it shows, with `{ "id": { "in": [...] } }` — the operator
+[Filtering](./filtering.md) describes — and merges them into what it already knows, so that
+opening a detail does not make the rest of the page forget its labels. Until a label
+arrives, or if it cannot be read, the cell shows the shortened identifier, `01a0ce7c…`: a
+failure never stops the table and raises no notification. A reference column is not
+sortable — sorting UUIDs means nothing, and sorting by label would need a join the server
+does not do.
+
+Both pieces are generic, one per project, under `frontend/src/admin/references/`:
+`ChoixReference.vue` and `libelles.ts`. `frontend-admin` lays them down, and `generate crud`
+writes them on a project installed before they existed, never over an existing one. Each
+screen only carries the two functions that bind them to its targets:
+
+```ts file=examples/help-desk/frontend/src/admin/vues/Commentaires.vue region=references
+```
+
+A reference to `users` goes through `POST /users/filter`, which only an administrator may
+call — the addresses of every account are personal data, and the admin space itself is open
+to any session. An account with the `user` role therefore sees shortened identifiers in the
+author column, and the picker shows "Reserved to administrators" in place of results. The
+route and its rights are in [Authentication](./auth.md#listing-accounts).
 
 ### Regenerating
 

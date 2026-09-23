@@ -40,6 +40,7 @@ pub async fn update_me(
     Ok(StatusCode::ACCEPTED)
 }
 
+// region: comptes
 // Réservé aux administrateurs : la liste des adresses est une donnée personnelle, et
 // l'espace d'administration est ouvert à toute session.
 #[utoipa::path(
@@ -72,3 +73,4 @@ pub async fn filter_users(
         service::filter_users(state.core().db(), &filtre, &pagination).await?,
     ))
 }
+// endregion: comptes

@@ -405,10 +405,10 @@ The name declared is the *relation*'s, `author`; the column is derived from it, 
 — which is what lets the SeaORM variant, the foreign key and the DTO field agree on a name
 without anyone repeating it. The third segment is the target table, as it exists in the
 project; a table the CLI cannot find is refused, by name, alongside the ones it does know.
-What a reference writes on both ends of the relation, its own two modifiers, and the shape
+What a reference writes on both ends of the relation, its own three modifiers, and the shape
 of its refusals belong to [Relations](../guides/relations.md), not to this page.
 
-### The six modifiers
+### The seven modifiers
 
 | Modifier | Effect |
 |---|---|
@@ -418,12 +418,22 @@ of its refusals belong to [Relations](../guides/relations.md), not to this page.
 | `max=<n>` | Textual field only. Length bound in the generated DTOs, overriding the default. |
 | `cascade` | Reference only. `ON DELETE CASCADE`. |
 | `nullify` | Reference only. `ON DELETE SET NULL` — requires `optional`. |
+| `label=<colonne>` | Reference only. The target column that names a row on the admin screen; defaults to the first textual column. |
 
 Their order is free and each may appear at most once. `unique` and `index` together are
 refused as redundant — a unique constraint already lays down an index — and so is `index`
 alone on a reference, whose foreign key is indexed without being asked. `cascade` and
 `nullify` contradict each other and are refused together; [Relations](../guides/relations.md)
 has the rest of a reference's grammar, including why the index is never optional.
+
+`label=` and `max=` are the two modifiers that carry a value. `label=` names a `string` or
+`text` column of the target, and is refused when empty, repeated, set on a field that is not
+a reference, or naming a column the target does not declare as text — the refusal lists the
+ones it does. It changes the admin screen alone: the entity, the DTOs, the migration and the
+OpenAPI contract are the same with or without it. On a project without `frontend-admin` it
+has nothing to change yet, and is checked all the same, so that a misspelt column does not
+wait in silence for the day the screen exists. [Relations](../guides/relations.md#on-the-admin-screen)
+shows what it names.
 
 Neither `unique` nor `index` applies to a `text` field: MySQL refuses an index on a `TEXT`
 column without a prefix length (error 1170). The refusal holds on every engine, PostgreSQL
