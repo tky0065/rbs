@@ -267,5 +267,5 @@ liste à laquelle on ne peut plus se fier.
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
 | v1.7 Frontend | ✅ livré — publiée le 2026-09-20 |
 | v1.8 Le projet engendré s'ouvre | ✅ livré — publiée le 2026-09-20, corrigée par la 1.8.1 le 2026-09-20 |
-| v1.9 Solidité | ⏳ planifié |
-| v1.10 Adoption | ⏳ planifié |
+| v1.9 Solidité | 🚧 en cours — reste la passe du scénario d'agent, à lancer à la main |
+| v1.10 Adoption | 🚧 en cours — l'enregistrement et la page « rbs et Loco » sont en place ; l'enregistrement reste à régénérer par la version publiée, et l'annonce à faire |
