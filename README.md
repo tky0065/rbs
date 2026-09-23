@@ -19,7 +19,7 @@ read it and change it.
 
 ## Status
 
-Version 1.8.1. [`CHANGELOG.md`](CHANGELOG.md) says what each release gives you, and
+Version 1.9.0. [`CHANGELOG.md`](CHANGELOG.md) says what each release gives you, and
 [`ROADMAP.md`](ROADMAP.md) which milestones are delivered and which come next.
 
 **rbs follows semantic versioning from 1.0 on.** The public API of `rbs-core` is frozen:

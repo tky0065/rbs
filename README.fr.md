@@ -19,7 +19,7 @@ modifier.
 
 ## Statut
 
-Version 1.8.1. [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'apporte chaque version, et
+Version 1.9.0. [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'apporte chaque version, et
 [`ROADMAP.md`](ROADMAP.md) quels jalons sont livrés et lesquels viennent ensuite.
 
 **rbs suit le versionnage sémantique à partir de la 1.0.** L'API publique de `rbs-core` est

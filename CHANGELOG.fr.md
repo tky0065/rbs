@@ -13,6 +13,29 @@ dépréciation.
 
 ## [Non publié]
 
+## [1.9.0] — 2026-09-23
+
+### Ajouté
+
+- **Le README s'ouvre sur un enregistrement**, de `rbs new` à l'écran d'administration,
+  régénéré par une seule commande qui échoue dès qu'une des siennes échoue.
+- **Une page qui compare rbs et [Loco](https://loco.rs)**, sur la philosophie plutôt que
+  sur une liste de fonctionnalités : où chaque projet place la frontière entre le cadre et
+  le code engendré. Chaque affirmation sur Loco est datée et sourcée.
+- **Un scénario d'agent**, `scenarios/commentaires/`, lancé à la main avant une version
+  mineure : un projet neuf, une tâche, et un verdict qui ne passe que si l'agent est passé
+  par le CLI. Sa première passe est consignée dans `ROADMAP.md`.
+
+### Modifié
+
+- **Toute sortie de commande que montrent la documentation ou les README est désormais
+  rejouée par un test**, ou dit dans la page pourquoi elle ne peut pas l'être. Plusieurs
+  mentaient : `rbs add auth` écrit 51 fichiers et non 40, un projet SQLite en porte 22 et
+  non 21, `rbs routes` en oubliait deux. Les chiffres restés dans la prose sont comparés à
+  leur source.
+- **Un projet engendré est maintenant compilé sous macOS et Windows en CI**, avec toutes
+  ses features. Rien d'engendré n'avait jamais été compilé hors de Linux.
+
 ### Corrigé
 
 - **`rbs new` sans `--yes` ne se bloque plus dans un script sous Windows.** Sans terminal

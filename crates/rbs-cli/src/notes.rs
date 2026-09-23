@@ -51,7 +51,7 @@ mod tests {
     /// Elle ne se lit pas dans le dépôt : entre deux publications, le workspace porte
     /// déjà le numéro à venir. Comme `NOYAU_PUBLIE` du diagnostic, la constante bascule
     /// au moment de publier — et c'est cette bascule qui met le catalogue en demeure.
-    const PUBLIEE: &str = "1.8.1";
+    const PUBLIEE: &str = "1.9.0";
 
     /// Suffixe d'une note ; son radical est la version qu'elle introduit.
     const SUFFIXE: &str = "md";
