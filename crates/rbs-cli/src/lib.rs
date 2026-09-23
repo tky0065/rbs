@@ -1,3 +1,17 @@
+//! Le binaire `rbs` : génération et maintenance de projets d'API web en Rust, sur Axum et
+//! SeaORM.
+//!
+//! Cette crate est un outil en ligne de commande, pas une bibliothèque : elle ne publie que
+//! [`run`], partagée par les deux binaires qu'elle installe, `rbs` et `rbs-cli`.
+//!
+//! ```bash
+//! cargo install rbs-cli
+//! ```
+//!
+//! La documentation d'usage — guides, référence des commandes, fragments — vit sur
+//! <https://tky0065.github.io/rbs/>. Le runtime des projets générés est la crate
+//! [`rbs-core`](https://docs.rs/rbs-core).
+
 mod add;
 mod agents;
 mod anchors;
