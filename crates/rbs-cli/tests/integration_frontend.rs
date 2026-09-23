@@ -294,6 +294,21 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
             ])
             .assert()
             .success();
+
+        // Une table à références : vers une table engendrée, forcée par `label=`, et vers
+        // les comptes, facultative. C'est le seul endroit où le sélecteur, la résolution
+        // et `usersFilter` passent par `vue-tsc`.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args([
+                "generate",
+                "crud",
+                "annotations",
+                "--fields",
+                "texte:string,bordereau:references:bordereaux:label=titre,auteur:references:users:optional",
+            ])
+            .assert()
+            .success();
     }
 
     assert!(
@@ -351,6 +366,20 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
 
     let repertoire = projet.join("frontend");
     npm(&repertoire, &["install", "--no-audit", "--no-fund"]);
+
+    // L'écran de la table à références porte le sélecteur et la résolution des comptes :
+    // c'est ce que `vue-tsc`, juste après, va faire ou non compiler.
+    let annotations = std::fs::read_to_string(repertoire.join("src/admin/vues/Annotations.vue"))
+        .expect("l'écran de la table à références doit être engendré");
+    assert!(
+        annotations.contains("ChoixReference"),
+        "l'écran à références n'importe pas le sélecteur\n{annotations}"
+    );
+    assert!(
+        annotations.contains("usersFilter"),
+        "l'écran à références n'appelle pas la résolution des comptes\n{annotations}"
+    );
+
     npm(&repertoire, &["run", "typecheck"]);
     npm(&repertoire, &["run", "build"]);
 
