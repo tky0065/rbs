@@ -195,6 +195,6 @@ quelques mois, dès que cette discipline se relâche.
   formateur `pretty` derrière chaque ligne que le serveur de cette page a affichée.
 - [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait
   encore installer, `observability` désormais dessus.
-- [Appeler l'API en TypeScript](./typescript-client.md) est le dernier tutoriel : un
+- [Appeler l'API en TypeScript](./typescript-client.md) est le tutoriel suivant : un
   front qui appelle `articles` à travers un client lu depuis le document OpenAPI de
   l'API elle-même, plutôt qu'une seconde copie de ses types.

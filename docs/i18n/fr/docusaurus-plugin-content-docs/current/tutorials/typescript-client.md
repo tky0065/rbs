@@ -5,7 +5,7 @@ title: Appeler l'API en TypeScript
 
 # Appeler l'API en TypeScript
 
-C'est le dernier tutoriel. Il reprend `demo` juste après [Votre
+Il reprend `demo` juste après [Votre
 première ressource](./first-resource.md) — en cours d'exécution, avec le CRUD `articles`
 de cette page et sa migration appliquée — et le lit dans un client typé plutôt que dans
 une réponse de serveur typée à la main côté front. Le cas : un navigateur ou un script
@@ -116,3 +116,6 @@ puisqu'aucune des deux routes de santé ne déclare de corps à analyser.
   lieu.
 - [`rbs generate`](../cli/generate.md) couvre la grammaire complète de `--fields`, pour
   une ressource plus riche que celle que cette série a bâtie une commande à la fois.
+- [Construire un gestionnaire de tickets](./help-desk.md) est le tutoriel suivant : un
+  projet neuf qui assemble `auth`, les relations et le frontend d'administration, et
+  régénère ce client après avoir retouché le contrat à la main.

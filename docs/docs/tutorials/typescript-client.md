@@ -5,7 +5,7 @@ title: Calling the API from TypeScript
 
 # Calling the API from TypeScript
 
-This is the last tutorial. It picks up `demo` right after [Your first
+It picks up `demo` right after [Your first
 resource](./first-resource.md) — running, with the `articles` CRUD from that page and its
 migration applied — and reads it into a typed client instead of a server response typed
 by hand on the front end. The case: a browser or a Node script that calls `articles`,
@@ -110,3 +110,6 @@ parse.
   and what makes a handler contribute an `operationId` in the first place.
 - [`rbs generate`](../cli/generate.md) covers the full grammar of `--fields`, for a
   resource richer than the one this series built one command at a time.
+- [Building a help desk](./help-desk.md) is the next tutorial: a new project that
+  assembles `auth`, relations and the admin frontend, and regenerates this client after
+  editing the contract by hand.
