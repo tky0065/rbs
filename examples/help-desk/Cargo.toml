@@ -11,7 +11,7 @@ rust-version = "1.94.1"
 default-run = "help-desk"
 
 [package.metadata.rbs]
-version = "1.9.0"
+version = "1.10.0"
 features = ["health", "frontend", "mail", "rate-limit", "auth", "frontend-admin", "tickets", "commentaires"]
 database = "postgres"
 lang = "fr"

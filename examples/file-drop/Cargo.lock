@@ -2066,7 +2066,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tokio",
  "tower-service",
  "tracing",
@@ -2979,7 +2979,7 @@ checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rbs-core"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "axum",

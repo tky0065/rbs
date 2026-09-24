@@ -11,7 +11,7 @@ rust-version = "1.94.1"
 default-run = "file-drop"
 
 [package.metadata.rbs]
-version = "1.9.0"
+version = "1.10.0"
 features = ["health", "redis", "mail", "storage", "uploads"]
 database = "postgres"
 lang = "fr"

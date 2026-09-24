@@ -4,7 +4,7 @@
 
 ![The tickets screen that rbs generate crud wrote into the admin space of the same project](docs/static/img/enregistrement/admin.png)
 
-*Recorded with rbs 1.9.0 by
+*Recorded with rbs 1.10.0 by
 [`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), which
 replays both parts and fails as soon as one command does. What runs between the commands —
 the database, migrations and seed, `npm install`, the typed client, the compilation, the
@@ -19,7 +19,7 @@ read it and change it.
 
 ## Status
 
-Version 1.9.0. [`CHANGELOG.md`](CHANGELOG.md) says what each release gives you, and
+Version 1.10.0. [`CHANGELOG.md`](CHANGELOG.md) says what each release gives you, and
 [`ROADMAP.md`](ROADMAP.md) which milestones are delivered and which come next.
 
 **rbs follows semantic versioning from 1.0 on.** The public API of `rbs-core` is frozen:

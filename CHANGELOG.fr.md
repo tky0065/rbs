@@ -13,6 +13,8 @@ dépréciation.
 
 ## [Non publié]
 
+## [1.10.0] — 2026-09-24
+
 ### Ajouté
 
 - **Une référence se choisit et se lit par un libellé dans les écrans d'administration.**
@@ -40,10 +42,11 @@ dépréciation.
 
 ### Modifié
 
-- **`generate crud` refuse un projet dont le `rbs-core` précède 1.10.0.** Le `filter.rs`
+- **`generate crud` refuse un projet dont la version rbs précède 1.10.0.** Le `filter.rs`
   qu'il écrit applique `in`, qu'un noyau antérieur n'a pas : le projet ne compilerait plus.
-  Le refus nomme `rbs upgrade`, qui relève cette ligne. Une dépendance par chemin, sans
-  version, n'est pas bornée.
+  La version lue est celle du projet, `version` sous `[package.metadata.rbs]`, et non la
+  dépendance `rbs-core` : un noyau pris par chemin est refusé lui aussi tant que cette ligne
+  précède 1.10.0. Le refus nomme `rbs upgrade`, qui relève cette ligne avec `rbs-core`.
 
 ## [1.9.0] — 2026-09-23
 
@@ -1454,7 +1457,9 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
-[Non publié]: https://github.com/tky0065/rbs/compare/v1.8.1...HEAD
+[Non publié]: https://github.com/tky0065/rbs/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/tky0065/rbs/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/tky0065/rbs/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/tky0065/rbs/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/tky0065/rbs/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/tky0065/rbs/compare/v1.6.0...v1.7.0

@@ -12,6 +12,8 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-09-24
+
 ### Added
 
 - **A reference is chosen and read by a label on the admin screens.** On a project carrying
@@ -1389,7 +1391,9 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[Unreleased]: https://github.com/tky0065/rbs/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/tky0065/rbs/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/tky0065/rbs/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/tky0065/rbs/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/tky0065/rbs/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/tky0065/rbs/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/tky0065/rbs/compare/v1.6.0...v1.7.0

@@ -4,7 +4,7 @@
 
 ![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](docs/static/img/enregistrement/admin.png)
 
-*Enregistré avec rbs 1.9.0 par
+*Enregistré avec rbs 1.10.0 par
 [`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), qui
 rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
 commandes — la base, les migrations et le seed, `npm install`, le client typé, la
@@ -19,7 +19,7 @@ modifier.
 
 ## Statut
 
-Version 1.9.0. [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'apporte chaque version, et
+Version 1.10.0. [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'apporte chaque version, et
 [`ROADMAP.md`](ROADMAP.md) quels jalons sont livrés et lesquels viennent ensuite.
 
 **rbs suit le versionnage sémantique à partir de la 1.0.** L'API publique de `rbs-core` est
